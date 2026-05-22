@@ -1,0 +1,18 @@
+# Maven
+/target/
+
+# Node / Vite
+/frontend/node_modules/
+/frontend/dist/
+
+# IDE
+/.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Upload & PDF output
+/uploads/
+/pdfs/

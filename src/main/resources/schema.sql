@@ -1,0 +1,169 @@
+-- ============================================
+-- 驾校报名与学员管理系统 - 数据库初始化脚本
+-- ============================================
+
+CREATE DATABASE IF NOT EXISTS drive_school DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE drive_school;
+
+-- 用户表
+DROP TABLE IF EXISTS `exam_registration`;
+DROP TABLE IF EXISTS `appointment`;
+DROP TABLE IF EXISTS `training_hour`;
+DROP TABLE IF EXISTS `learning_phase`;
+DROP TABLE IF EXISTS `student_info`;
+DROP TABLE IF EXISTS `coach`;
+DROP TABLE IF EXISTS `fee_standard`;
+DROP TABLE IF EXISTS `exam_location`;
+DROP TABLE IF EXISTS `subject`;
+DROP TABLE IF EXISTS `vehicle_type`;
+DROP TABLE IF EXISTS `user`;
+
+CREATE TABLE `user` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT,
+    `username` VARCHAR(50) NOT NULL,
+    `password` VARCHAR(200) NOT NULL,
+    `role` VARCHAR(20) NOT NULL COMMENT 'ROLE_STUDENT, ROLE_COACH, ROLE_ADMIN',
+    `real_name` VARCHAR(50) DEFAULT NULL,
+    `phone` VARCHAR(20) DEFAULT NULL,
+    `created_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_username` (`username`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 车型表
+CREATE TABLE `vehicle_type` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT,
+    `name` VARCHAR(20) NOT NULL COMMENT 'C1, C2, B2等',
+    `min_age` INT NOT NULL DEFAULT 18,
+    `subject_hours_json` VARCHAR(500) DEFAULT NULL COMMENT '各科目最低学时JSON',
+    `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 科目表
+CREATE TABLE `subject` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT,
+    `name` VARCHAR(50) NOT NULL COMMENT '科目一~科目四',
+    `sort_order` INT NOT NULL,
+    `exam_fee` DECIMAL(10,2) NOT NULL DEFAULT 0,
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 考场表
+CREATE TABLE `exam_location` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT,
+    `name` VARCHAR(100) NOT NULL,
+    `address` VARCHAR(200) DEFAULT NULL,
+    `capacity` INT NOT NULL DEFAULT 50,
+    `contact` VARCHAR(50) DEFAULT NULL,
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 费用标准表
+CREATE TABLE `fee_standard` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT,
+    `item_name` VARCHAR(50) NOT NULL COMMENT '报名费/考试费/补考费',
+    `fee_type` VARCHAR(30) NOT NULL COMMENT 'REGISTRATION/EXAM/RETAKE',
+    `amount` DECIMAL(10,2) NOT NULL DEFAULT 0,
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 学员信息表
+CREATE TABLE `student_info` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT,
+    `user_id` BIGINT NOT NULL,
+    `id_card` VARCHAR(18) DEFAULT NULL,
+    `address` VARCHAR(200) DEFAULT NULL,
+    `vehicle_type_id` BIGINT DEFAULT NULL,
+    `id_card_front_photo` VARCHAR(500) DEFAULT NULL,
+    `id_card_back_photo` VARCHAR(500) DEFAULT NULL,
+    `health_report_photo` VARCHAR(500) DEFAULT NULL,
+    `photo` VARCHAR(500) DEFAULT NULL,
+    `audit_status` VARCHAR(20) NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING/APPROVED/REJECTED',
+    `audit_remark` VARCHAR(500) DEFAULT NULL,
+    `medical_status` VARCHAR(20) NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING/PASSED/FAILED',
+    `coach_id` BIGINT DEFAULT NULL,
+    `assign_status` VARCHAR(20) NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING/ASSIGNED',
+    `cert_status` VARCHAR(20) NOT NULL DEFAULT 'NONE' COMMENT 'NONE/WAITING/ISSUED',
+    `registration_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_user_id` (`user_id`),
+    KEY `idx_audit_status` (`audit_status`),
+    KEY `idx_coach_id` (`coach_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 教练表
+CREATE TABLE `coach` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT,
+    `user_id` BIGINT NOT NULL,
+    `gender` VARCHAR(10) DEFAULT NULL,
+    `vehicle_type_id` BIGINT DEFAULT NULL,
+    `rating` INT NOT NULL DEFAULT 3 COMMENT '1-5',
+    `schedule_json` VARCHAR(500) DEFAULT NULL COMMENT '档期JSON',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_user_id` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 学时记录表
+CREATE TABLE `training_hour` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT,
+    `student_id` BIGINT NOT NULL,
+    `coach_id` BIGINT NOT NULL,
+    `duration` DECIMAL(5,1) NOT NULL DEFAULT 0,
+    `content` VARCHAR(500) DEFAULT NULL,
+    `record_date` DATE NOT NULL,
+    `created_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_student_id` (`student_id`),
+    KEY `idx_coach_id` (`coach_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 约课表
+CREATE TABLE `appointment` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT,
+    `student_id` BIGINT NOT NULL,
+    `coach_id` BIGINT NOT NULL,
+    `appointment_time` VARCHAR(50) NOT NULL COMMENT '如: 周一上午',
+    `appointment_date` DATE NOT NULL,
+    `status` VARCHAR(20) NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING/CONFIRMED/CANCELLED/COMPLETED',
+    `cancel_reason` VARCHAR(500) DEFAULT NULL,
+    `created_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_student_id` (`student_id`),
+    KEY `idx_coach_id` (`coach_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 学习阶段表
+CREATE TABLE `learning_phase` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT,
+    `student_id` BIGINT NOT NULL,
+    `current_phase` VARCHAR(20) NOT NULL DEFAULT 'PHASE1' COMMENT 'PHASE1/PHASE2/PHASE3/PHASE4/COMPLETED',
+    `phase1_hours` DECIMAL(5,1) NOT NULL DEFAULT 0,
+    `phase2_hours` DECIMAL(5,1) NOT NULL DEFAULT 0,
+    `phase3_hours` DECIMAL(5,1) NOT NULL DEFAULT 0,
+    `phase4_hours` DECIMAL(5,1) NOT NULL DEFAULT 0,
+    `phase1_completed` TINYINT(1) NOT NULL DEFAULT 0,
+    `phase2_completed` TINYINT(1) NOT NULL DEFAULT 0,
+    `phase3_completed` TINYINT(1) NOT NULL DEFAULT 0,
+    `phase4_completed` TINYINT(1) NOT NULL DEFAULT 0,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_student_id` (`student_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 考试报名表
+CREATE TABLE `exam_registration` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT,
+    `student_id` BIGINT NOT NULL,
+    `subject_id` BIGINT NOT NULL,
+    `exam_location_id` BIGINT NOT NULL,
+    `exam_date` DATE NOT NULL,
+    `status` VARCHAR(20) NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING/APPROVED/REJECTED/COMPLETED',
+    `score` DECIMAL(5,1) DEFAULT NULL,
+    `is_passed` TINYINT(1) DEFAULT NULL,
+    `retry_count` INT NOT NULL DEFAULT 0,
+    `created_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_student_id` (`student_id`),
+    KEY `idx_subject_id` (`subject_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
