@@ -3,7 +3,8 @@
     <h2>学员管理</h2>
     <el-table :data="students" border style="margin-top:20px">
       <el-table-column prop="id" label="ID" width="60" />
-      <el-table-column prop="userId" label="用户ID" width="80" />
+      <el-table-column prop="realName" label="姓名" width="100" />
+      <el-table-column prop="phone" label="电话" width="130" />
       <el-table-column prop="idCard" label="身份证号" width="180" />
       <el-table-column prop="vehicleTypeId" label="报考车型" width="80" />
       <el-table-column label="审核状态" width="100">
@@ -104,7 +105,7 @@ async function loadStudents() {
 
 function auditDialog(row) {
   currentStudent.value = row
-  auditForm.medicalStatus = row.medicalStatus || 'PASSED'
+  auditForm.medicalStatus = row.medicalStatus === 'PASSED' ? 'PASSED' : 'PASSED'
   auditForm.status = 'APPROVED'
   auditForm.remark = ''
   showAudit.value = true
@@ -112,6 +113,7 @@ function auditDialog(row) {
 
 async function submitAudit() {
   await adminApi().auditStudent(currentStudent.value.id, {
+    medicalStatus: auditForm.medicalStatus,
     status: auditForm.status,
     remark: auditForm.remark
   })

@@ -34,7 +34,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="考试日期">
-          <el-date-picker v-model="examForm.examDate" type="date" placeholder="选择日期" />
+          <el-date-picker v-model="examForm.examDate" type="date" placeholder="选择日期" value-format="YYYY-MM-DD" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -48,7 +48,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { useUserStore } from '../../stores/user'
-import { studentApi, adminApi } from '../../api'
+import { studentApi, commonApi } from '../../api'
 import { ElMessage } from 'element-plus'
 
 const userStore = useUserStore()
@@ -64,8 +64,8 @@ onMounted(async () => {
   try {
     const [examRes, subjRes, locRes] = await Promise.all([
       studentApi().getMyExams(userStore.userId),
-      adminApi().listSubjects(),
-      adminApi().listExamLocations()
+      commonApi().listSubjects(),
+      commonApi().listExamLocations()
     ])
     exams.value = examRes.data || []
     subjects.value = subjRes.data || []

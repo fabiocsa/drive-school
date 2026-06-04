@@ -6,6 +6,7 @@ import com.driveschool.util.Result;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.servlet.http.HttpServletResponse;
 import java.util.Map;
 
 @RestController
@@ -25,9 +26,10 @@ public class StudentController {
         this.examRegistrationService = examRegistrationService;
     }
 
-    @GetMapping("/info")
-    public Result<?> getMyInfo(@RequestAttribute("username") String username) {
-        return null;
+    @GetMapping("/myinfo")
+    public Result<?> getMyInfo(@RequestParam Long userId) {
+        Map<String, Object> info = studentInfoService.getMyInfo(userId);
+        return Result.ok(info);
     }
 
     @PostMapping("/register")
@@ -40,12 +42,6 @@ public class StudentController {
     public Result<?> uploadFile(@RequestParam("file") MultipartFile file) {
         String filename = studentInfoService.uploadFile(file);
         return Result.ok(Map.of("filename", filename));
-    }
-
-    @GetMapping("/myinfo")
-    public Result<?> getMyInfo(@RequestParam Long userId) {
-        Map<String, Object> info = studentInfoService.getMyInfo(userId);
-        return Result.ok(info);
     }
 
     @GetMapping("/trainings")
@@ -83,18 +79,18 @@ public class StudentController {
 
     @GetMapping("/pdf/{studentId}")
     public Result<?> getPdfList(@PathVariable Long studentId) {
-        return Result.ok(Map.of(
-            "registration", studentInfoService.downloadPdf(studentId, "registration") != null,
-            "health", studentInfoService.downloadPdf(studentId, "health") != null,
-            "examcard", studentInfoService.downloadPdf(studentId, "examcard") != null
-        ));
+        boolean reg = studentInfoService.downloadPdf(studentId, "registration") != null;
+        boolean health = studentInfoService.downloadPdf(studentId, "health") != null;
+        boolean examcard = studentInfoService.downloadPdf(studentId, "examcard") != null;
+        return Result.ok(Map.of("registration", reg, "health", health, "examcard", examcard));
     }
 
     @GetMapping("/pdf/download/{studentId}/{pdfType}")
-    public byte[] downloadPdf(@PathVariable Long studentId, @PathVariable String pdfType,
-                               javax.servlet.http.HttpServletResponse response) {
+    public void downloadPdf(@PathVariable Long studentId, @PathVariable String pdfType,
+                             HttpServletResponse response) throws Exception {
+        byte[] pdfBytes = studentInfoService.downloadPdf(studentId, pdfType);
         response.setContentType("application/pdf");
         response.setHeader("Content-Disposition", "attachment; filename=" + pdfType + ".pdf");
-        return studentInfoService.downloadPdf(studentId, pdfType);
+        response.getOutputStream().write(pdfBytes);
     }
 }

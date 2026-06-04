@@ -84,8 +84,8 @@ async function submitAppointment() {
 
 async function handleCancel(row) {
   try {
-    await ElMessageBox.prompt('请输入取消原因', '取消约课')
-    await studentApi().cancelAppointment(row.id, { userId: userStore.userId, reason: '' })
+    const { value: reason } = await ElMessageBox.prompt('请输入取消原因', '取消约课')
+    await studentApi().cancelAppointment(row.id, { userId: userStore.userId, reason: reason || '' })
     ElMessage.success('取消成功')
     const res = await studentApi().getMyAppointments(userStore.userId)
     appointments.value = res.data || []

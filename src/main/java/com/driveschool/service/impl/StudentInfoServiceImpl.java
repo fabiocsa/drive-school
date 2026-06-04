@@ -143,13 +143,10 @@ public class StudentInfoServiceImpl extends ServiceImpl<StudentInfoMapper, Stude
             throw new RuntimeException("当前状态不可审核");
         }
 
-        if ("PASSED".equals(status)) {
-            info.setMedicalStatus("PASSED");
-        } else if ("FAILED".equals(status)) {
-            info.setMedicalStatus("FAILED");
-        }
-
         if ("APPROVED".equals(status)) {
+            if (!"PASSED".equals(info.getMedicalStatus())) {
+                throw new RuntimeException("体检未合格，无法通过审核");
+            }
             info.setAuditStatus("APPROVED");
             info.setAuditRemark(remark != null ? remark : "管理员审核通过");
             updateById(info);
@@ -165,8 +162,6 @@ public class StudentInfoServiceImpl extends ServiceImpl<StudentInfoMapper, Stude
         } else if ("REJECTED".equals(status)) {
             info.setAuditStatus("REJECTED");
             info.setAuditRemark(remark != null ? remark : "管理员审核不通过");
-            updateById(info);
-        } else {
             updateById(info);
         }
     }

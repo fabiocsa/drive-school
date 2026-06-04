@@ -40,8 +40,18 @@ export function authApi() {
   }
 }
 
+export function commonApi() {
+  return {
+    listVehicleTypes: () => api.get('/common/vehicle-types'),
+    listSubjects: () => api.get('/common/subjects'),
+    listExamLocations: () => api.get('/common/exam-locations'),
+    getCoachStudents: (userId) => api.get('/common/coaches/students', { params: { userId } })
+  }
+}
+
 export function studentApi() {
   return {
+    getMyInfo: (userId) => api.get('/student/myinfo', { params: { userId } }),
     submitRegistration: (data) => api.post('/student/register', data),
     uploadFile: (file) => {
       const formData = new FormData()
@@ -50,7 +60,6 @@ export function studentApi() {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
     },
-    getMyInfo: (userId) => api.get('/student/myinfo', { params: { userId } }),
     getTrainings: (studentId) => api.get('/student/trainings', { params: { studentId } }),
     createAppointment: (data) => api.post('/student/appointment', data),
     cancelAppointment: (id, data) => api.put(`/student/appointment/cancel/${id}`, data),

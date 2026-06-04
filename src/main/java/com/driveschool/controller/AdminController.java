@@ -52,12 +52,45 @@ public class AdminController {
 
     @GetMapping("/students")
     public Result<?> listStudents() {
-        return Result.ok(studentInfoMapper.selectList(null));
+        List<StudentInfo> students = studentInfoMapper.selectList(null);
+        List<Map<String, Object>> result = new java.util.ArrayList<>();
+        for (StudentInfo si : students) {
+            Map<String, Object> map = new java.util.HashMap<>();
+            map.put("id", si.getId());
+            map.put("userId", si.getUserId());
+            map.put("idCard", si.getIdCard());
+            map.put("address", si.getAddress());
+            map.put("vehicleTypeId", si.getVehicleTypeId());
+            map.put("idCardFrontPhoto", si.getIdCardFrontPhoto());
+            map.put("idCardBackPhoto", si.getIdCardBackPhoto());
+            map.put("healthReportPhoto", si.getHealthReportPhoto());
+            map.put("photo", si.getPhoto());
+            map.put("auditStatus", si.getAuditStatus());
+            map.put("auditRemark", si.getAuditRemark());
+            map.put("medicalStatus", si.getMedicalStatus());
+            map.put("coachId", si.getCoachId());
+            map.put("assignStatus", si.getAssignStatus());
+            map.put("certStatus", si.getCertStatus());
+            map.put("registrationTime", si.getRegistrationTime());
+            User u = userMapper.selectById(si.getUserId());
+            map.put("realName", u != null ? u.getRealName() : "");
+            map.put("phone", u != null ? u.getPhone() : "");
+            result.add(map);
+        }
+        return Result.ok(result);
     }
 
     @PutMapping("/students/audit/{id}")
     public Result<?> auditStudent(@PathVariable Long id, @RequestBody Map<String, String> data) {
-        studentInfoService.adminAudit(id, data.get("status"), data.get("remark"));
+        String medicalStatus = data.get("medicalStatus");
+        String status = data.get("status");
+        String remark = data.get("remark");
+        StudentInfo info = studentInfoMapper.selectById(id);
+        if (info != null && medicalStatus != null) {
+            info.setMedicalStatus(medicalStatus);
+            studentInfoMapper.updateById(info);
+        }
+        studentInfoService.adminAudit(id, status, remark);
         return Result.ok();
     }
 

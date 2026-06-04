@@ -38,7 +38,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { useUserStore } from '../../stores/user'
-import { studentApi, adminApi } from '../../api'
+import { studentApi, commonApi } from '../../api'
 import { ElMessage } from 'element-plus'
 
 const userStore = useUserStore()
@@ -80,7 +80,7 @@ async function submitRegistration() {
 
 onMounted(async () => {
   try {
-    const res = await adminApi().listVehicleTypes()
+    const res = await commonApi().listVehicleTypes()
     vehicleTypes.value = res.data || []
   } catch (e) {}
 })
