@@ -37,7 +37,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { adminApi } from '../../api'
 import * as echarts from 'echarts'
 
@@ -45,8 +45,21 @@ const year = ref(new Date().getFullYear())
 const month = ref(null)
 const yearOptions = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i)
 const regChart = ref(null); const passRateChart = ref(null); const coachChart = ref(null)
+let regChartInstance = null; let passRateChartInstance = null; let coachChartInstance = null
 
 onMounted(() => { loadStats() })
+onBeforeUnmount(() => {
+  regChartInstance?.dispose()
+  passRateChartInstance?.dispose()
+  coachChartInstance?.dispose()
+  window.removeEventListener('resize', handleResize)
+})
+
+function handleResize() {
+  regChartInstance?.resize()
+  passRateChartInstance?.resize()
+  coachChartInstance?.resize()
+}
 
 async function loadStats() {
   try {
@@ -56,13 +69,15 @@ async function loadStats() {
     initRegChart(allRes.data?.registration)
     initPassRateChart(allRes.data?.passRate)
     initCoachChart(allRes.data?.coachWorkload)
+    window.addEventListener('resize', handleResize)
   } catch (e) {}
 }
 
 function initRegChart(data) {
   if (!regChart.value) return
-  const chart = echarts.init(regChart.value)
-  chart.setOption({
+  if (regChartInstance) regChartInstance.dispose()
+  regChartInstance = echarts.init(regChart.value)
+  regChartInstance.setOption({
     tooltip: { trigger: 'axis' },
     xAxis: { type: 'category', data: data?.labels || [] },
     yAxis: { type: 'value', name: '报名人数' },
@@ -72,8 +87,9 @@ function initRegChart(data) {
 
 function initPassRateChart(data) {
   if (!passRateChart.value) return
-  const chart = echarts.init(passRateChart.value)
-  chart.setOption({
+  if (passRateChartInstance) passRateChartInstance.dispose()
+  passRateChartInstance = echarts.init(passRateChart.value)
+  passRateChartInstance.setOption({
     tooltip: { trigger: 'axis' },
     xAxis: { type: 'category', data: data?.labels || [] },
     yAxis: { type: 'value', name: '通过率(%)', max: 100 },
@@ -83,8 +99,9 @@ function initPassRateChart(data) {
 
 function initCoachChart(data) {
   if (!coachChart.value) return
-  const chart = echarts.init(coachChart.value)
-  chart.setOption({
+  if (coachChartInstance) coachChartInstance.dispose()
+  coachChartInstance = echarts.init(coachChart.value)
+  coachChartInstance.setOption({
     tooltip: { trigger: 'axis' },
     legend: { data: ['学员数量', '总学时'] },
     xAxis: { type: 'category', data: data?.labels || [] },

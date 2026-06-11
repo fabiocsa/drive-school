@@ -6,7 +6,9 @@
       <el-table-column prop="realName" label="姓名" width="100" />
       <el-table-column prop="phone" label="电话" width="130" />
       <el-table-column prop="idCard" label="身份证号" width="180" />
-      <el-table-column prop="vehicleTypeId" label="报考车型" width="80" />
+      <el-table-column label="报考车型" width="80">
+        <template #default="{row}">{{ getVehicleTypeName(row.vehicleTypeId) }}</template>
+      </el-table-column>
       <el-table-column label="审核状态" width="100">
         <template #default="{row}">
           <el-tag :type="row.auditStatus === 'APPROVED' ? 'success' : row.auditStatus === 'REJECTED' ? 'danger' : 'warning'">
@@ -79,7 +81,7 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { adminApi } from '../../api'
+import { adminApi, commonApi } from '../../api'
 import { ElMessage } from 'element-plus'
 
 const students = ref([])
@@ -88,13 +90,22 @@ const showAssign = ref(false)
 const currentStudent = ref(null)
 const recommendedCoaches = ref([])
 const selectedCoachId = ref(null)
+const vehicleTypeMap = ref({})
 
 const statusMap = { PENDING: '待审核', APPROVED: '已通过', REJECTED: '未通过' }
 const auditForm = reactive({ medicalStatus: 'PASSED', status: 'APPROVED', remark: '' })
 
 onMounted(async () => {
   await loadStudents()
+  try {
+    const vtRes = await commonApi().listVehicleTypes()
+    (vtRes.data || []).forEach(v => { vehicleTypeMap.value[v.id] = v.name })
+  } catch (e) {}
 })
+
+function getVehicleTypeName(id) {
+  return vehicleTypeMap.value[id] || id
+}
 
 async function loadStudents() {
   try {

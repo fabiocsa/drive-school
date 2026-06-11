@@ -48,4 +48,11 @@ public class CoachController {
     public Result<?> confirmAppointment(@PathVariable Long id, @RequestParam Long userId) {
         return Result.ok(appointmentService.confirmAppointment(id, userId));
     }
+
+    @PutMapping("/phase/{studentId}")
+    public Result<?> adjustPhase(@PathVariable Long studentId, @RequestBody Map<String, String> data) {
+        String newPhase = data.get("newPhase");
+        trainingHourService.manualAdjustPhase(studentId, newPhase);
+        return Result.ok();
+    }
 }

@@ -28,6 +28,11 @@
           <el-button type="primary">点击上传</el-button>
         </el-upload>
       </el-form-item>
+      <el-form-item label="证件照">
+        <el-upload :action="uploadUrl" :on-success="(res) => form.photo = res.data.filename" :before-upload="checkPhotoFile" list-type="picture">
+          <el-button type="primary">上传照片</el-button>
+        </el-upload>
+      </el-form-item>
       <el-form-item>
         <el-button type="primary" @click="submitRegistration" :loading="loading">提交报名</el-button>
       </el-form-item>
@@ -61,6 +66,19 @@ function checkFile(file) {
   }
   if (file.size > 10 * 1024 * 1024) {
     ElMessage.error('文件不能超过10MB')
+    return false
+  }
+  return true
+}
+
+function checkPhotoFile(file) {
+  const validTypes = ['image/jpeg', 'image/png']
+  if (!validTypes.includes(file.type)) {
+    ElMessage.error('照片仅支持 jpg/png 格式')
+    return false
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    ElMessage.error('照片不能超过5MB')
     return false
   }
   return true

@@ -2,7 +2,7 @@
   <div>
     <h2>约课管理</h2>
     <el-table :data="appointments" border style="margin-top:20px">
-      <el-table-column prop="studentId" label="学员ID" width="100" />
+      <el-table-column prop="studentName" label="学员姓名" width="100" />
       <el-table-column prop="appointmentTime" label="约课时间" width="160" />
       <el-table-column prop="appointmentDate" label="约课日期" width="120" />
       <el-table-column prop="status" label="状态" width="100">

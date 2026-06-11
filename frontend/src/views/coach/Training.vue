@@ -23,8 +23,25 @@
         </el-form-item>
       </el-form>
     </el-card>
+
+    <el-card style="margin:20px 0" v-if="form.studentId">
+      <template #header>调整学习阶段</template>
+      <el-form inline>
+        <el-form-item label="当前阶段:">
+          <el-tag type="warning">{{ phaseMap[currentPhase] || currentPhase }}</el-tag>
+        </el-form-item>
+        <el-form-item label="调整为:">
+          <el-select v-model="selectedPhase" placeholder="选择阶段">
+            <el-option v-for="(label, key) in phaseMap" :key="key" :label="label" :value="key" />
+          </el-select>
+        </el-form-item>
+        <el-form-item>
+          <el-button type="warning" @click="adjustPhase">确认调整</el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
+
     <el-table :data="records" border>
-      <el-table-column prop="studentId" label="学员ID" width="100" />
       <el-table-column prop="recordDate" label="培训日期" width="120" />
       <el-table-column prop="duration" label="学时" width="80" />
       <el-table-column prop="content" label="内容" />
@@ -43,6 +60,10 @@ import { ElMessage } from 'element-plus'
 const userStore = useUserStore()
 const records = ref([])
 const myStudents = ref([])
+const currentPhase = ref('')
+const selectedPhase = ref('')
+
+const phaseMap = { PHASE1: '科目一学习', PHASE2: '科目二训练', PHASE3: '科目三训练', PHASE4: '科目四学习', COMPLETED: '已完成' }
 
 const form = reactive({ studentId: null, duration: 0.5, content: '', recordDate: '' })
 
@@ -55,6 +76,11 @@ onMounted(async () => {
 
 function onStudentChange(studentId) {
   loadRecords(studentId)
+  // 获取学员当前阶段
+  const student = myStudents.value.find(s => s.studentInfo.id === studentId)
+  if (student) {
+    currentPhase.value = student.studentInfo?.currentPhase || student.learningPhase?.currentPhase || ''
+  }
 }
 
 async function loadRecords(studentId) {
@@ -82,6 +108,23 @@ async function recordTraining() {
     await coachApi().recordTraining(data)
     ElMessage.success('学时记录成功')
     await loadRecords(form.studentId)
+    // 刷新学员列表以更新阶段
+    const res = await commonApi().getCoachStudents(userStore.userId)
+    myStudents.value = res.data || []
+  } catch (e) {}
+}
+
+async function adjustPhase() {
+  if (!selectedPhase.value) {
+    ElMessage.warning('请选择目标阶段')
+    return
+  }
+  try {
+    await coachApi().adjustPhase(form.studentId, { newPhase: selectedPhase.value })
+    ElMessage.success('阶段调整成功')
+    currentPhase.value = selectedPhase.value
+    const res = await commonApi().getCoachStudents(userStore.userId)
+    myStudents.value = res.data || []
   } catch (e) {}
 }
 </script>

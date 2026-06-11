@@ -77,7 +77,8 @@ export function coachApi() {
     recordTraining: (data) => api.post('/coach/training/record', data),
     getStudentTrainings: (studentId) => api.get('/coach/students/trainings', { params: { studentId } }),
     getAppointments: (userId) => api.get('/coach/appointments', { params: { userId } }),
-    confirmAppointment: (id, userId) => api.put(`/coach/appointment/confirm/${id}`, null, { params: { userId } })
+    confirmAppointment: (id, userId) => api.put(`/coach/appointment/confirm/${id}`, null, { params: { userId } }),
+    adjustPhase: (studentId, data) => api.put(`/coach/phase/${studentId}`, data)
   }
 }
 

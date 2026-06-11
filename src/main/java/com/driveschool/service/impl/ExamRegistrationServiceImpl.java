@@ -141,6 +141,38 @@ public class ExamRegistrationServiceImpl extends ServiceImpl<ExamRegistrationMap
     }
 
     @Override
+    public List<Map<String, Object>> listAllExams() {
+        List<ExamRegistration> exams = list(new LambdaQueryWrapper<ExamRegistration>()
+                .orderByDesc(ExamRegistration::getCreatedTime));
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (ExamRegistration exam : exams) {
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", exam.getId());
+            map.put("studentId", exam.getStudentId());
+            map.put("subjectId", exam.getSubjectId());
+            map.put("examLocationId", exam.getExamLocationId());
+            map.put("examDate", exam.getExamDate());
+            map.put("status", exam.getStatus());
+            map.put("score", exam.getScore());
+            map.put("isPassed", exam.getIsPassed());
+            map.put("retryCount", exam.getRetryCount());
+            map.put("createdTime", exam.getCreatedTime());
+            // 关联学员姓名
+            StudentInfo si = studentInfoMapper.selectById(exam.getStudentId());
+            if (si != null) {
+                User user = userMapper.selectById(si.getUserId());
+                map.put("studentName", user != null ? user.getRealName() : "");
+                map.put("studentCard", si.getIdCard());
+            } else {
+                map.put("studentName", "");
+                map.put("studentCard", "");
+            }
+            result.add(map);
+        }
+        return result;
+    }
+
+    @Override
     public void issueCert(Long studentId) {
         StudentInfo info = studentInfoMapper.selectById(studentId);
         if (info == null) throw new RuntimeException("学员不存在");

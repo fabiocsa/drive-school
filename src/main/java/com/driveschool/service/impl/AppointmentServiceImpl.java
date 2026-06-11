@@ -6,21 +6,25 @@ import com.driveschool.entity.*;
 import com.driveschool.mapper.AppointmentMapper;
 import com.driveschool.mapper.CoachMapper;
 import com.driveschool.mapper.StudentInfoMapper;
+import com.driveschool.mapper.UserMapper;
 import com.driveschool.service.AppointmentService;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
-import java.util.List;
+import java.util.*;
 
 @Service
 public class AppointmentServiceImpl extends ServiceImpl<AppointmentMapper, Appointment> implements AppointmentService {
 
     private final StudentInfoMapper studentInfoMapper;
     private final CoachMapper coachMapper;
+    private final UserMapper userMapper;
 
-    public AppointmentServiceImpl(StudentInfoMapper studentInfoMapper, CoachMapper coachMapper) {
+    public AppointmentServiceImpl(StudentInfoMapper studentInfoMapper, CoachMapper coachMapper,
+                                   UserMapper userMapper) {
         this.studentInfoMapper = studentInfoMapper;
         this.coachMapper = coachMapper;
+        this.userMapper = userMapper;
     }
 
     @Override
@@ -66,21 +70,59 @@ public class AppointmentServiceImpl extends ServiceImpl<AppointmentMapper, Appoi
     }
 
     @Override
-    public List<Appointment> getCoachAppointments(Long coachUserId) {
+    public List<Map<String, Object>> getCoachAppointments(Long coachUserId) {
         Coach coach = coachMapper.selectOne(new LambdaQueryWrapper<Coach>().eq(Coach::getUserId, coachUserId));
         if (coach == null) throw new RuntimeException("教练信息不存在");
-        return list(new LambdaQueryWrapper<Appointment>()
+        List<Appointment> list = list(new LambdaQueryWrapper<Appointment>()
                 .eq(Appointment::getCoachId, coach.getId())
                 .orderByDesc(Appointment::getCreatedTime));
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Appointment a : list) {
+            Map<String, Object> map = toMap(a);
+            // 关联学员姓名
+            StudentInfo si = studentInfoMapper.selectById(a.getStudentId());
+            if (si != null) {
+                User u = userMapper.selectById(si.getUserId());
+                map.put("studentName", u != null ? u.getRealName() : "");
+                map.put("studentPhone", u != null ? u.getPhone() : "");
+            }
+            result.add(map);
+        }
+        return result;
     }
 
     @Override
-    public List<Appointment> getStudentAppointments(Long studentUserId) {
+    public List<Map<String, Object>> getStudentAppointments(Long studentUserId) {
         StudentInfo info = studentInfoMapper.selectOne(
                 new LambdaQueryWrapper<StudentInfo>().eq(StudentInfo::getUserId, studentUserId));
         if (info == null) throw new RuntimeException("学员信息不存在");
-        return list(new LambdaQueryWrapper<Appointment>()
+        List<Appointment> list = list(new LambdaQueryWrapper<Appointment>()
                 .eq(Appointment::getStudentId, info.getId())
                 .orderByDesc(Appointment::getCreatedTime));
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Appointment a : list) {
+            Map<String, Object> map = toMap(a);
+            // 关联教练姓名
+            Coach c = coachMapper.selectById(a.getCoachId());
+            if (c != null) {
+                User u = userMapper.selectById(c.getUserId());
+                map.put("coachName", u != null ? u.getRealName() : "");
+            }
+            result.add(map);
+        }
+        return result;
+    }
+
+    private Map<String, Object> toMap(Appointment a) {
+        Map<String, Object> map = new HashMap<>();
+        map.put("id", a.getId());
+        map.put("studentId", a.getStudentId());
+        map.put("coachId", a.getCoachId());
+        map.put("appointmentTime", a.getAppointmentTime());
+        map.put("appointmentDate", a.getAppointmentDate());
+        map.put("status", a.getStatus());
+        map.put("cancelReason", a.getCancelReason());
+        map.put("createdTime", a.getCreatedTime());
+        return map;
     }
 }

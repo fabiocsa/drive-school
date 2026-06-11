@@ -19,16 +19,19 @@ public class CommonController {
     private final StudentInfoMapper studentInfoMapper;
     private final UserMapper userMapper;
     private final CoachMapper coachMapper;
+    private final com.driveschool.mapper.LearningPhaseMapper learningPhaseMapper;
 
     public CommonController(VehicleTypeMapper vehicleTypeMapper, SubjectMapper subjectMapper,
                              ExamLocationMapper examLocationMapper, StudentInfoMapper studentInfoMapper,
-                             UserMapper userMapper, CoachMapper coachMapper) {
+                             UserMapper userMapper, CoachMapper coachMapper,
+                             com.driveschool.mapper.LearningPhaseMapper learningPhaseMapper) {
         this.vehicleTypeMapper = vehicleTypeMapper;
         this.subjectMapper = subjectMapper;
         this.examLocationMapper = examLocationMapper;
         this.studentInfoMapper = studentInfoMapper;
         this.userMapper = userMapper;
         this.coachMapper = coachMapper;
+        this.learningPhaseMapper = learningPhaseMapper;
     }
 
     @GetMapping("/vehicle-types")
@@ -62,6 +65,11 @@ public class CommonController {
             User u = userMapper.selectById(si.getUserId());
             map.put("realName", u != null ? u.getRealName() : "");
             map.put("phone", u != null ? u.getPhone() : "");
+            // 包含学习阶段信息
+            com.driveschool.entity.LearningPhase phase = learningPhaseMapper.selectOne(
+                    new LambdaQueryWrapper<com.driveschool.entity.LearningPhase>()
+                            .eq(com.driveschool.entity.LearningPhase::getStudentId, si.getId()));
+            map.put("learningPhase", phase);
             result.add(map);
         }
         return Result.ok(result);

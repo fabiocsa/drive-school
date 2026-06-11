@@ -3,7 +3,8 @@
     <h2>考试管理</h2>
     <el-table :data="exams" border style="margin-top:20px">
       <el-table-column prop="id" label="ID" width="60" />
-      <el-table-column prop="studentId" label="学员ID" width="100" />
+      <el-table-column prop="studentName" label="学员姓名" width="100" />
+      <el-table-column prop="studentCard" label="身份证号" width="180" />
       <el-table-column label="科目" width="80">
         <template #default="{row}">{{ '科目' + row.subjectId }}</template>
       </el-table-column>

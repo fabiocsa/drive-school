@@ -32,7 +32,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if (!passwordEncoder.matches(password, user.getPassword())) {
             throw new RuntimeException("用户名或密码错误");
         }
-        String token = jwtTokenProvider.generateToken(username, user.getRole());
+        String token = jwtTokenProvider.generateToken(username, user.getRole(), user.getId());
         Map<String, Object> result = new HashMap<>();
         result.put("token", token);
         result.put("userId", user.getId());

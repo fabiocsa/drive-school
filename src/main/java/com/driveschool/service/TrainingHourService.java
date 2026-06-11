@@ -11,4 +11,5 @@ public interface TrainingHourService extends IService<TrainingHour> {
     BigDecimal getTotalHours(Long studentId);
     java.util.List<TrainingHour> getStudentRecords(Long studentId);
     void checkAndUpdatePhase(Long studentId);
+    void manualAdjustPhase(Long studentId, String newPhase);
 }

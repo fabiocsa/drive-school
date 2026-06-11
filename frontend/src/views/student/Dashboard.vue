@@ -15,10 +15,10 @@
         <el-card>
           <template #header>学习进度</template>
           <p>当前阶段: {{ phaseMap[info?.learningPhase?.currentPhase] || '未开始' }}</p>
-          <p>科目一: {{ info?.learningPhase?.phase1Completed ? '已完成' : '未完成' }}</p>
-          <p>科目二: {{ info?.learningPhase?.phase2Completed ? '已完成' : '未完成' }}</p>
-          <p>科目三: {{ info?.learningPhase?.phase3Completed ? '已完成' : '未完成' }}</p>
-          <p>科目四: {{ info?.learningPhase?.phase4Completed ? '已完成' : '未完成' }}</p>
+          <p>科目一: {{ info?.learningPhase?.phase1Completed ? '已完成' : '未完成' }} ({{ info?.learningPhase?.phase1Hours || 0 }} 学时)</p>
+          <p>科目二: {{ info?.learningPhase?.phase2Completed ? '已完成' : '未完成' }} ({{ info?.learningPhase?.phase2Hours || 0 }} 学时)</p>
+          <p>科目三: {{ info?.learningPhase?.phase3Completed ? '已完成' : '未完成' }} ({{ info?.learningPhase?.phase3Hours || 0 }} 学时)</p>
+          <p>科目四: {{ info?.learningPhase?.phase4Completed ? '已完成' : '未完成' }} ({{ info?.learningPhase?.phase4Hours || 0 }} 学时)</p>
         </el-card>
       </el-col>
       <el-col :span="8">

@@ -13,6 +13,7 @@ public interface ExamRegistrationService extends IService<ExamRegistration> {
     void recordScore(Long examId, java.math.BigDecimal score, Integer isPassed);
     List<ExamRegistration> getStudentExams(Long studentId);
     void checkAndUpdateCertStatus(Long studentId);
-    List<Map<String, Object>> getWaitingCertStudents();
+    java.util.List<Map<String, Object>> getWaitingCertStudents();
+    java.util.List<Map<String, Object>> listAllExams();
     void issueCert(Long studentId);
 }

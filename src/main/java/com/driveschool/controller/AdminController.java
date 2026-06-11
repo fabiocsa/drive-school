@@ -114,8 +114,15 @@ public class AdminController {
 
     @PostMapping("/coaches")
     public Result<?> addCoach(@RequestBody Map<String, Object> data) {
+        String username = (String) data.get("username");
+        // 检查用户名唯一性
+        User existingUser = userMapper.selectOne(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<User>()
+                .eq(User::getUsername, username));
+        if (existingUser != null) {
+            return Result.fail("用户名已存在");
+        }
         User user = new User();
-        user.setUsername((String) data.get("username"));
+        user.setUsername(username);
         user.setPassword(new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder()
                 .encode((String) data.getOrDefault("password", "123456")));
         user.setRole("ROLE_COACH");
@@ -142,11 +149,32 @@ public class AdminController {
         if (data.containsKey("scheduleJson")) coach.setScheduleJson((String) data.get("scheduleJson"));
         if (data.containsKey("gender")) coach.setGender((String) data.get("gender"));
         coachMapper.updateById(coach);
+        // 同步更新 User 表姓名和电话
+        User user = userMapper.selectById(coach.getUserId());
+        if (user != null) {
+            if (data.containsKey("realName")) user.setRealName((String) data.get("realName"));
+            if (data.containsKey("phone")) user.setPhone((String) data.get("phone"));
+            userMapper.updateById(user);
+        }
         return Result.ok();
     }
 
     @DeleteMapping("/coaches/{id}")
     public Result<?> deleteCoach(@PathVariable Long id) {
+        Coach coach = coachMapper.selectById(id);
+        if (coach != null) {
+            // 先解除学员关联
+            java.util.List<StudentInfo> students = studentInfoMapper.selectList(
+                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<StudentInfo>()
+                            .eq(StudentInfo::getCoachId, id));
+            for (StudentInfo s : students) {
+                s.setCoachId(null);
+                s.setAssignStatus("PENDING");
+                studentInfoMapper.updateById(s);
+            }
+            // 删除User记录
+            userMapper.deleteById(coach.getUserId());
+        }
         coachMapper.deleteById(id);
         return Result.ok();
     }
@@ -250,7 +278,7 @@ public class AdminController {
 
     @GetMapping("/exams")
     public Result<?> listExams() {
-        return Result.ok(examRegistrationService.list());
+        return Result.ok(examRegistrationService.listAllExams());
     }
 
     @PutMapping("/exams/audit/{id}")
