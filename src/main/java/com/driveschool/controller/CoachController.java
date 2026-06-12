@@ -6,6 +6,7 @@ import com.driveschool.service.*;
 import com.driveschool.util.Result;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -50,7 +51,6 @@ public class CoachController {
         if (coach == null) {
             return Result.fail("教练信息不存在");
         }
-        // 验证学员属于当前教练
         if (!coachService.isStudentAssignedToCoach(hour.getStudentId(), coach.getId())) {
             return Result.fail("无权为该学员记录学时");
         }
@@ -98,6 +98,53 @@ public class CoachController {
             return Result.fail("未登录或登录已过期");
         }
         return Result.ok(appointmentService.confirmAppointment(id, userId));
+    }
+
+    // ============================================================
+    // 新增：更新空闲档期（含容量设置）
+    // PUT /api/coach/schedule
+    // Body: { "scheduleJson": "[{\"dayTime\":\"周一上午\",\"capacity\":5},...]" }
+    // ============================================================
+    @PutMapping("/schedule")
+    public Result<?> updateSchedule(@RequestBody Map<String, String> data) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        if (userId == null) {
+            return Result.fail("未登录或登录已过期");
+        }
+        String scheduleJson = data.get("scheduleJson");
+        if (scheduleJson == null || scheduleJson.isBlank()) {
+            return Result.fail("档期数据不能为空");
+        }
+        Coach updated = coachService.updateSchedule(userId, scheduleJson);
+        return Result.ok(updated);
+    }
+
+    // ============================================================
+    // 新增：模糊搜索学员（用于学时管理选择学员）
+    // GET /api/coach/students/search?keyword=张三
+    // ============================================================
+    @GetMapping("/students/search")
+    public Result<?> searchStudents(@RequestParam(required = false, defaultValue = "") String keyword) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        if (userId == null) {
+            return Result.fail("未登录或登录已过期");
+        }
+        List<Map<String, Object>> list = coachService.searchStudents(userId, keyword);
+        return Result.ok(list);
+    }
+
+    // ============================================================
+    // 新增：获取学员详细信息摘要
+    // GET /api/coach/students/{studentInfoId}/summary
+    // ============================================================
+    @GetMapping("/students/{studentInfoId}/summary")
+    public Result<?> getStudentSummary(@PathVariable Long studentInfoId) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        if (userId == null) {
+            return Result.fail("未登录或登录已过期");
+        }
+        Map<String, Object> summary = coachService.getStudentSummary(userId, studentInfoId);
+        return Result.ok(summary);
     }
 
     /**

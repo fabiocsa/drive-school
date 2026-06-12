@@ -51,7 +51,7 @@ public class AppointmentServiceImpl extends ServiceImpl<AppointmentMapper, Appoi
     }
 
     // ============================================================
-    // 核心：创建约课（增加冲突校验）
+    // 核心：创建约课（容量限制 + 冲突校验）
     // ============================================================
     @Override
     public Appointment createAppointment(Appointment appointment) {
@@ -60,7 +60,6 @@ public class AppointmentServiceImpl extends ServiceImpl<AppointmentMapper, Appoi
         if (info == null || info.getCoachId() == null) {
             throw new RuntimeException("您尚未分配教练");
         }
-        // 确保 appointment 中的 coachId 来自学员的绑定教练（防止前端篡改）
         appointment.setCoachId(info.getCoachId());
 
         // 2. 校验日期不能是过去
@@ -68,7 +67,7 @@ public class AppointmentServiceImpl extends ServiceImpl<AppointmentMapper, Appoi
             throw new RuntimeException("约课日期不能是过去");
         }
 
-        // 3. 校验所选时间槽是否在教练的排班范围内
+        // 3. 校验所选时间槽是否在教练的排班范围内，并检查容量
         Coach coach = coachMapper.selectById(appointment.getCoachId());
         if (coach == null) {
             throw new RuntimeException("教练信息不存在");
@@ -78,25 +77,26 @@ public class AppointmentServiceImpl extends ServiceImpl<AppointmentMapper, Appoi
             throw new RuntimeException("该教练暂无排班");
         }
 
-        // 解析教练每周排班
-        Set<String> weeklySchedule = parseScheduleJson(scheduleJson);
+        // 解析含容量的排班 → Map<dayOfWeek+halfDay, capacity>
+        Map<String, Integer> scheduleWithCapacity = parseScheduleWithCapacity(scheduleJson);
         String dayOfWeekCn = getDayOfWeekCn(appointment.getAppointmentDate());
         String halfDay = getHalfDay(appointment.getAppointmentTime());
+        String key = dayOfWeekCn + halfDay;
 
-        // 教练在该半日是否上班
-        String requiredToken = dayOfWeekCn + halfDay; // 如 "周一上午"
-        if (!weeklySchedule.contains(requiredToken)) {
+        if (!scheduleWithCapacity.containsKey(key)) {
             throw new RuntimeException("该时段不在教练排班范围内");
         }
 
-        // 4. 冲突校验：同一教练+日期+时间槽不能有非取消的预约
-        long conflictCount = count(new LambdaQueryWrapper<Appointment>()
+        int capacity = scheduleWithCapacity.get(key);
+
+        // 4. 容量校验：该教练 + 日期 + 相同时间槽的已确认/待确认预约数必须 < capacity
+        long bookedCount = count(new LambdaQueryWrapper<Appointment>()
                 .eq(Appointment::getCoachId, appointment.getCoachId())
                 .eq(Appointment::getAppointmentDate, appointment.getAppointmentDate())
                 .eq(Appointment::getAppointmentTime, appointment.getAppointmentTime())
                 .notIn(Appointment::getStatus, "CANCELLED"));
-        if (conflictCount > 0) {
-            throw new RuntimeException("该时间段已被预约，请选择其他时间");
+        if (bookedCount >= capacity) {
+            throw new RuntimeException("该时段已约满（容量" + capacity + "），请选择其他时间");
         }
 
         // 5. 入库
@@ -106,7 +106,7 @@ public class AppointmentServiceImpl extends ServiceImpl<AppointmentMapper, Appoi
     }
 
     // ============================================================
-    // 新增：查询教练在指定日期的可用时间槽（上午/下午分组）
+    // 新增：查询教练在指定日期的可用时间槽（上午/下午分组，含容量信息）
     // ============================================================
     @Override
     public Map<String, Object> getCoachAvailableSlots(Long coachId, LocalDate date) {
@@ -115,43 +115,68 @@ public class AppointmentServiceImpl extends ServiceImpl<AppointmentMapper, Appoi
         String dayOfWeekCn = getDayOfWeekCn(date);
         result.put("dayOfWeek", dayOfWeekCn);
 
-        // 读取教练排班
+        // 读取教练排班（含容量）
         Coach coach = coachMapper.selectById(coachId);
-        Set<String> weeklySchedule;
+        Map<String, Integer> scheduleWithCapacity;
         if (coach == null || coach.getScheduleJson() == null || coach.getScheduleJson().equals("[]")) {
-            weeklySchedule = Collections.emptySet();
+            scheduleWithCapacity = Collections.emptyMap();
         } else {
-            weeklySchedule = parseScheduleJson(coach.getScheduleJson());
+            scheduleWithCapacity = parseScheduleWithCapacity(coach.getScheduleJson());
         }
 
-        // 查询该教练该日期已被约的时间槽（排除已取消）
+        // 查询该教练该日期已被约的时间槽（排除已取消），按 timeSlot 计数
         List<Appointment> booked = list(new LambdaQueryWrapper<Appointment>()
                 .eq(Appointment::getCoachId, coachId)
                 .eq(Appointment::getAppointmentDate, date)
                 .notIn(Appointment::getStatus, "CANCELLED"));
-        Set<String> bookedSlots = booked.stream()
-                .map(Appointment::getAppointmentTime)
-                .collect(Collectors.toSet());
+        Map<String, Long> bookedCountBySlot = booked.stream()
+                .collect(Collectors.groupingBy(Appointment::getAppointmentTime, Collectors.counting()));
 
         // 上午
-        boolean morningAvailable = weeklySchedule.contains(dayOfWeekCn + "上午");
-        List<String> morningSlots = morningAvailable
-                ? MORNING_SLOTS.stream().filter(s -> !bookedSlots.contains(s)).collect(Collectors.toList())
-                : Collections.emptyList();
+        String morningKey = dayOfWeekCn + "上午";
+        int morningCapacity = scheduleWithCapacity.getOrDefault(morningKey, 0);
+        List<Map<String, Object>> morningSlots = new ArrayList<>();
+        if (morningCapacity > 0) {
+            for (String slot : MORNING_SLOTS) {
+                long used = bookedCountBySlot.getOrDefault(slot, 0L);
+                int remaining = (int) Math.max(0, morningCapacity - used);
+                Map<String, Object> slotInfo = new LinkedHashMap<>();
+                slotInfo.put("time", slot);
+                slotInfo.put("capacity", morningCapacity);
+                slotInfo.put("used", (int) used);
+                slotInfo.put("remaining", remaining);
+                slotInfo.put("available", remaining > 0);
+                morningSlots.add(slotInfo);
+            }
+        }
 
         Map<String, Object> morning = new LinkedHashMap<>();
-        morning.put("available", !morningSlots.isEmpty());
+        morning.put("available", morningSlots.stream().anyMatch(s -> (Boolean) s.get("available")));
+        morning.put("capacity", morningCapacity);
         morning.put("slots", morningSlots);
         result.put("morning", morning);
 
         // 下午
-        boolean afternoonAvailable = weeklySchedule.contains(dayOfWeekCn + "下午");
-        List<String> afternoonSlots = afternoonAvailable
-                ? AFTERNOON_SLOTS.stream().filter(s -> !bookedSlots.contains(s)).collect(Collectors.toList())
-                : Collections.emptyList();
+        String afternoonKey = dayOfWeekCn + "下午";
+        int afternoonCapacity = scheduleWithCapacity.getOrDefault(afternoonKey, 0);
+        List<Map<String, Object>> afternoonSlots = new ArrayList<>();
+        if (afternoonCapacity > 0) {
+            for (String slot : AFTERNOON_SLOTS) {
+                long used = bookedCountBySlot.getOrDefault(slot, 0L);
+                int remaining = (int) Math.max(0, afternoonCapacity - used);
+                Map<String, Object> slotInfo = new LinkedHashMap<>();
+                slotInfo.put("time", slot);
+                slotInfo.put("capacity", afternoonCapacity);
+                slotInfo.put("used", (int) used);
+                slotInfo.put("remaining", remaining);
+                slotInfo.put("available", remaining > 0);
+                afternoonSlots.add(slotInfo);
+            }
+        }
 
         Map<String, Object> afternoon = new LinkedHashMap<>();
-        afternoon.put("available", !afternoonSlots.isEmpty());
+        afternoon.put("available", afternoonSlots.stream().anyMatch(s -> (Boolean) s.get("available")));
+        afternoon.put("capacity", afternoonCapacity);
         afternoon.put("slots", afternoonSlots);
         result.put("afternoon", afternoon);
 
@@ -163,48 +188,53 @@ public class AppointmentServiceImpl extends ServiceImpl<AppointmentMapper, Appoi
     // ============================================================
     @Override
     public List<String> getAvailableDates(Long coachId, LocalDate startDate, LocalDate endDate) {
-        // 读取教练排班
         Coach coach = coachMapper.selectById(coachId);
-        Set<String> weeklySchedule;
+        Map<String, Integer> scheduleWithCapacity;
         if (coach == null || coach.getScheduleJson() == null || coach.getScheduleJson().equals("[]")) {
             return Collections.emptyList();
         }
-        weeklySchedule = parseScheduleJson(coach.getScheduleJson());
-        if (weeklySchedule.isEmpty()) {
+        scheduleWithCapacity = parseScheduleWithCapacity(coach.getScheduleJson());
+        if (scheduleWithCapacity.isEmpty()) {
             return Collections.emptyList();
         }
 
-        // 查询该教练在日期范围内所有已约记录（排除已取消），按日期分组统计已约槽位
+        // 查询该教练在日期范围内所有已约记录（排除已取消），按日期+时间槽计数
         List<Appointment> booked = list(new LambdaQueryWrapper<Appointment>()
                 .eq(Appointment::getCoachId, coachId)
                 .between(Appointment::getAppointmentDate, startDate, endDate)
                 .notIn(Appointment::getStatus, "CANCELLED"));
 
-        // bookedSlotsByDate: date -> Set<timeSlot>
-        Map<LocalDate, Set<String>> bookedSlotsByDate = new HashMap<>();
+        Map<LocalDate, Map<String, Long>> countByDateAndSlot = new HashMap<>();
         for (Appointment a : booked) {
-            bookedSlotsByDate.computeIfAbsent(a.getAppointmentDate(), k -> new HashSet<>())
-                    .add(a.getAppointmentTime());
+            countByDateAndSlot
+                    .computeIfAbsent(a.getAppointmentDate(), k -> new HashMap<>())
+                    .merge(a.getAppointmentTime(), 1L, Long::sum);
         }
 
         List<String> availableDates = new ArrayList<>();
         LocalDate d = startDate;
         while (!d.isAfter(endDate)) {
             String dayOfWeekCn = getDayOfWeekCn(d);
-            int availableCount = 0;
+            Map<String, Long> dayCounts = countByDateAndSlot.getOrDefault(d, Collections.emptyMap());
+            boolean hasAny = false;
 
             // 上午
-            if (weeklySchedule.contains(dayOfWeekCn + "上午")) {
-                Set<String> bookedToday = bookedSlotsByDate.getOrDefault(d, Collections.emptySet());
-                availableCount += MORNING_SLOTS.stream().filter(s -> !bookedToday.contains(s)).count();
-            }
-            // 下午
-            if (weeklySchedule.contains(dayOfWeekCn + "下午")) {
-                Set<String> bookedToday = bookedSlotsByDate.getOrDefault(d, Collections.emptySet());
-                availableCount += AFTERNOON_SLOTS.stream().filter(s -> !bookedToday.contains(s)).count();
+            String morningKey = dayOfWeekCn + "上午";
+            int morningCap = scheduleWithCapacity.getOrDefault(morningKey, 0);
+            if (morningCap > 0) {
+                hasAny = MORNING_SLOTS.stream().anyMatch(s -> dayCounts.getOrDefault(s, 0L) < morningCap);
             }
 
-            if (availableCount > 0) {
+            // 下午
+            if (!hasAny) {
+                String afternoonKey = dayOfWeekCn + "下午";
+                int afternoonCap = scheduleWithCapacity.getOrDefault(afternoonKey, 0);
+                if (afternoonCap > 0) {
+                    hasAny = AFTERNOON_SLOTS.stream().anyMatch(s -> dayCounts.getOrDefault(s, 0L) < afternoonCap);
+                }
+            }
+
+            if (hasAny) {
                 availableDates.add(d.format(DateTimeFormatter.ISO_LOCAL_DATE));
             }
             d = d.plusDays(1);
@@ -306,15 +336,59 @@ public class AppointmentServiceImpl extends ServiceImpl<AppointmentMapper, Appoi
         return map;
     }
 
-    /** 解析 coach.schedule_json，如 ["周一上午","周一下午",...] → Set */
-    private Set<String> parseScheduleJson(String json) {
-        // scheduleJson 格式: ["周一上午","周一下午","周二上午",...]
-        if (json == null || json.isBlank()) return Collections.emptySet();
-        return Arrays.stream(json.replaceAll("[\\[\\]\"]", "").split(","))
-                .map(String::trim)
-                .filter(s -> !s.isEmpty())
-                .collect(Collectors.toSet());
+    /**
+     * 解析 coach.schedule_json → Map<dayOfWeek+halfDay, capacity>
+     * 兼容两种格式:
+     *   旧: ["周一上午","周一下午"]                  → 每个默认容量 5
+     *   新: [{"dayTime":"周一上午","capacity":5},...]  → 使用指定容量
+     */
+    private Map<String, Integer> parseScheduleWithCapacity(String json) {
+        if (json == null || json.isBlank()) return Collections.emptyMap();
+        String trimmed = json.trim();
+        if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) return Collections.emptyMap();
+
+        Map<String, Integer> result = new LinkedHashMap<>();
+        // 新格式检测：包含 "dayTime" 字段 → JSON 对象数组
+        if (trimmed.contains("dayTime")) {
+            // 简单解析 JSON 对象数组（不引入 Jackson，手写轻量解析）
+            // 格式: [{"dayTime":"周一上午","capacity":5},{"dayTime":"周一下午","capacity":3}]
+            String content = trimmed.substring(1, trimmed.length() - 1); // 去掉外层 []
+            String[] items = content.split("\\},\\{");
+            for (String item : items) {
+                // 清理花括号和引号
+                String clean = item.replaceAll("[{}\"]", "").trim();
+                String[] pairs = clean.split(",");
+                String dayTime = null;
+                int capacity = DEFAULT_CAPACITY;
+                for (String pair : pairs) {
+                    String[] kv = pair.split(":");
+                    if (kv.length == 2) {
+                        if (kv[0].trim().equals("dayTime")) {
+                            dayTime = kv[1].trim();
+                        } else if (kv[0].trim().equals("capacity")) {
+                            try { capacity = Integer.parseInt(kv[1].trim()); } catch (NumberFormatException ignored) {}
+                        }
+                    }
+                }
+                if (dayTime != null && !dayTime.isEmpty()) {
+                    result.put(dayTime, Math.max(1, capacity)); // 容量至少为 1
+                }
+            }
+        } else {
+            // 旧格式: ["周一上午","周一下午",...] → 全部使用默认容量
+            String[] tokens = trimmed.replaceAll("[\\[\\]\"]", "").split(",");
+            for (String token : tokens) {
+                String t = token.trim();
+                if (!t.isEmpty()) {
+                    result.put(t, DEFAULT_CAPACITY);
+                }
+            }
+        }
+        return result;
     }
+
+    /** 默认容量：旧格式 schedule_json 或未指定 capacity 时使用 */
+    private static final int DEFAULT_CAPACITY = 5;
 
     /** 根据日期获取中文周几，如 LocalDate(2024-06-17 周一) → "周一" */
     private String getDayOfWeekCn(LocalDate date) {

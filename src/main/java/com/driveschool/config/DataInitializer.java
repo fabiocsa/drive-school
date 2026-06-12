@@ -44,9 +44,13 @@ public class DataInitializer implements CommandLineRunner {
         initUserIfAbsent("student1", "123456", "ROLE_STUDENT", "张三", "13900000001");
         initUserIfAbsent("student2", "123456", "ROLE_STUDENT", "李四", "13900000002");
 
-        initCoachIfAbsent(coach1Id, "男", 1L, 5, "[\"周一上午\",\"周一下午\",\"周二上午\",\"周三上午\",\"周四上午\",\"周五上午\"]");
-        initCoachIfAbsent(coach2Id, "女", 1L, 4, "[\"周二下午\",\"周三下午\",\"周四下午\",\"周五下午\",\"周六上午\"]");
-        initCoachIfAbsent(coach3Id, "男", 2L, 4, "[\"周一上午\",\"周三上午\",\"周五上午\",\"周日上午\"]");
+        // 使用新格式 schedule_json：每项含 dayTime + capacity
+        initCoachIfAbsent(coach1Id, "男", 1L, 5,
+                "[{\"dayTime\":\"周一上午\",\"capacity\":5},{\"dayTime\":\"周一下午\",\"capacity\":5},{\"dayTime\":\"周二上午\",\"capacity\":4},{\"dayTime\":\"周三上午\",\"capacity\":5},{\"dayTime\":\"周四上午\",\"capacity\":4},{\"dayTime\":\"周五上午\",\"capacity\":5}]");
+        initCoachIfAbsent(coach2Id, "女", 1L, 4,
+                "[{\"dayTime\":\"周二下午\",\"capacity\":3},{\"dayTime\":\"周三下午\",\"capacity\":3},{\"dayTime\":\"周四下午\",\"capacity\":3},{\"dayTime\":\"周五下午\",\"capacity\":4},{\"dayTime\":\"周六上午\",\"capacity\":4}]");
+        initCoachIfAbsent(coach3Id, "男", 2L, 4,
+                "[{\"dayTime\":\"周一上午\",\"capacity\":4},{\"dayTime\":\"周三上午\",\"capacity\":4},{\"dayTime\":\"周五上午\",\"capacity\":3},{\"dayTime\":\"周日上午\",\"capacity\":5}]");
     }
 
     private Long initUserIfAbsent(String username, String password, String role,

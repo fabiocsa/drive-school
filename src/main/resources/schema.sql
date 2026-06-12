@@ -167,3 +167,6 @@ ALTER TABLE `student_info` ADD COLUMN `audited_time` DATETIME DEFAULT NULL COMME
 -- 约课表：复合索引，加速"按教练+日期查询可用时间槽"并辅助防并发冲突
 -- 覆盖 coach_id + appointment_date + status，避免全表扫描
 ALTER TABLE `appointment` ADD INDEX `idx_coach_date_status` (`coach_id`, `appointment_date`, `status`);
+
+-- 扩展 schedule_json 列以容纳含容量的新格式 (VARCHAR 500 → 1000)
+ALTER TABLE `coach` MODIFY COLUMN `schedule_json` VARCHAR(1000) DEFAULT NULL COMMENT '档期JSON(含容量)';

@@ -73,7 +73,13 @@ export function coachApi() {
     getStudentTrainings: (studentId) => api.get('/coach/students/trainings', { params: { studentId } }),
     getAppointments: () => api.get('/coach/appointments'),
     confirmAppointment: (id) => api.put(`/coach/appointment/confirm/${id}`),
-    adjustPhase: (studentId, data) => api.put(`/coach/phase/${studentId}`, data)
+    adjustPhase: (studentId, data) => api.put(`/coach/phase/${studentId}`, data),
+    /** 更新教练空闲档期（含容量） */
+    updateSchedule: (scheduleJson) => api.put('/coach/schedule', { scheduleJson }),
+    /** 模糊搜索学员 */
+    searchStudents: (keyword) => api.get('/coach/students/search', { params: { keyword } }),
+    /** 获取学员详细信息摘要 */
+    getStudentSummary: (studentInfoId) => api.get(`/coach/students/${studentInfoId}/summary`)
   }
 }
 

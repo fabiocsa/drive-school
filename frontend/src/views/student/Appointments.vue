@@ -25,8 +25,7 @@
     </el-table>
 
     <!-- 发起约课弹窗 -->
-    <el-dialog v-model="showDialog" title="发起约课" width="520px" @closed="onDialogClosed">
-      <!-- 步骤 1：选择日期 -->
+    <el-dialog v-model="showDialog" title="发起约课" width="560px" @closed="onDialogClosed">
       <el-form label-width="80px">
         <el-form-item label="选择日期">
           <el-date-picker
@@ -47,7 +46,7 @@
         <span style="margin-left:8px;color:#909399">正在加载可用时段...</span>
       </div>
 
-      <!-- 步骤 2：选择上午/下午的时间槽 -->
+      <!-- 步骤 2：选择上午/下午的时间槽（含容量展示） -->
       <div v-else-if="selectedDate">
         <!-- 上午 -->
         <div class="half-day-section">
@@ -55,19 +54,29 @@
             <span class="half-day-label">☀ 上午（08:00 - 12:00）</span>
             <el-tag v-if="morningAvailable" type="success" size="small">可选</el-tag>
             <el-tag v-else type="info" size="small">暂无可用</el-tag>
+            <span v-if="morningCapacity > 0" style="font-size:12px;color:#909399">
+              （每时段容量 {{ morningCapacity }} 人）
+            </span>
           </div>
-          <div v-if="morningAvailable" class="slot-list">
-            <el-button
+          <div v-if="morningSlots.length" class="slot-list">
+            <div
               v-for="slot in morningSlots"
-              :key="slot"
-              :type="selectedSlot === slot ? 'primary' : 'default'"
+              :key="slot.time"
+              class="slot-card"
+              :class="{
+                'slot-selected': selectedSlot === slot.time,
+                'slot-full': !slot.available
+              }"
               @click="selectSlot(slot)"
-              class="slot-btn"
-            >{{ slot }}</el-button>
+            >
+              <div class="slot-time">{{ slot.time }}</div>
+              <div class="slot-capacity" v-if="slot.available">
+                剩余 <strong>{{ slot.remaining }}</strong>/{{ slot.capacity }} 席
+              </div>
+              <div class="slot-capacity full-text" v-else>已满</div>
+            </div>
           </div>
-          <div v-else class="empty-hint">
-            {{ morningSlots.length === 0 && hasData ? '该时段暂无可约时间' : '' }}
-          </div>
+          <div v-else class="empty-hint">该时段暂无可约时间</div>
         </div>
 
         <!-- 下午 -->
@@ -76,19 +85,29 @@
             <span class="half-day-label">🌤 下午（13:00 - 17:00）</span>
             <el-tag v-if="afternoonAvailable" type="success" size="small">可选</el-tag>
             <el-tag v-else type="info" size="small">暂无可用</el-tag>
+            <span v-if="afternoonCapacity > 0" style="font-size:12px;color:#909399">
+              （每时段容量 {{ afternoonCapacity }} 人）
+            </span>
           </div>
-          <div v-if="afternoonAvailable" class="slot-list">
-            <el-button
+          <div v-if="afternoonSlots.length" class="slot-list">
+            <div
               v-for="slot in afternoonSlots"
-              :key="slot"
-              :type="selectedSlot === slot ? 'primary' : 'default'"
+              :key="slot.time"
+              class="slot-card"
+              :class="{
+                'slot-selected': selectedSlot === slot.time,
+                'slot-full': !slot.available
+              }"
               @click="selectSlot(slot)"
-              class="slot-btn"
-            >{{ slot }}</el-button>
+            >
+              <div class="slot-time">{{ slot.time }}</div>
+              <div class="slot-capacity" v-if="slot.available">
+                剩余 <strong>{{ slot.remaining }}</strong>/{{ slot.capacity }} 席
+              </div>
+              <div class="slot-capacity full-text" v-else>已满</div>
+            </div>
           </div>
-          <div v-else class="empty-hint">
-            {{ afternoonSlots.length === 0 && hasData ? '该时段暂无可约时间' : '' }}
-          </div>
+          <div v-else class="empty-hint">该时段暂无可约时间</div>
         </div>
 
         <!-- 当天完全无可用时段 -->
@@ -108,7 +127,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useUserStore } from '../../stores/user'
 import { studentApi } from '../../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -120,20 +139,21 @@ const showDialog = ref(false)
 // --- 约课表单状态 ---
 const selectedDate = ref(null)
 const selectedSlot = ref('')
-const morningSlots = ref([])
+const morningSlots = ref([])       // 现在是对象数组: [{time, capacity, used, remaining, available}]
 const afternoonSlots = ref([])
 const morningAvailable = ref(false)
 const afternoonAvailable = ref(false)
+const morningCapacity = ref(0)
+const afternoonCapacity = ref(0)
 const loadingSlots = ref(false)
-const hasData = ref(false)        // 是否已完成数据加载（区分"加载中"与"无数据"）
+const hasData = ref(false)
 
 const coachId = ref(null)
 const studentInfoId = ref(null)
-const availableDates = ref([])    // 有可用槽位的日期列表（用于 date-picker 高亮）
+const availableDates = ref([])
 
 const statusMap = { PENDING: '待确认', CONFIRMED: '已确认', CANCELLED: '已取消', COMPLETED: '已完成' }
 
-// 日期快捷选项
 const dateShortcuts = [
   { text: '明天', value: () => { const d = new Date(); d.setDate(d.getDate() + 1); return d } },
   { text: '后天', value: () => { const d = new Date(); d.setDate(d.getDate() + 2); return d } },
@@ -148,130 +168,94 @@ onMounted(async () => {
     const res = await studentApi().getMyAppointments()
     appointments.value = res.data || []
   } catch (e) {}
-
-  // 预加载未来 30 天的可用日期（用于日期选择器禁用不可用日期）
   await loadAvailableDates()
 })
 
-/** 预加载未来 N 天内哪些日期有可用槽位 */
 async function loadAvailableDates() {
   if (!coachId.value) return
   try {
-    const today = new Date()
-    const end = new Date()
-    end.setDate(today.getDate() + 30)
-    const startStr = today.toISOString().slice(0, 10)
-    const endStr = end.toISOString().slice(0, 10)
-    const res = await studentApi().getCoachAvailableDates(coachId.value, startStr, endStr)
+    const today = new Date(); const end = new Date(); end.setDate(today.getDate() + 30)
+    const res = await studentApi().getCoachAvailableDates(coachId.value,
+      today.toISOString().slice(0, 10), end.toISOString().slice(0, 10))
     availableDates.value = res.data || []
   } catch (e) {}
 }
 
-/** 打开弹窗时重置状态，并预填明天的日期 */
 function openDialog() {
-  // 边界检查：未分配教练时不允许约课
-  if (!coachId.value) {
-    ElMessage.warning('您尚未分配教练，无法发起约课')
-    return
-  }
+  if (!coachId.value) { ElMessage.warning('您尚未分配教练，无法发起约课'); return }
   showDialog.value = true
-
-  // 重置状态
   selectedSlot.value = ''
-  morningSlots.value = []
-  afternoonSlots.value = []
-  morningAvailable.value = false
-  afternoonAvailable.value = false
+  morningSlots.value = []; afternoonSlots.value = []
+  morningAvailable.value = false; afternoonAvailable.value = false
+  morningCapacity.value = 0; afternoonCapacity.value = 0
   hasData.value = false
-
-  // 自动选中明天，触发可用时段加载
-  const tomorrow = new Date()
-  tomorrow.setDate(tomorrow.getDate() + 1)
-  tomorrow.setHours(0, 0, 0, 0)
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(0,0,0,0)
   selectedDate.value = tomorrow
   onDateChange(tomorrow)
 }
 
-/** 弹窗关闭时清理 */
 function onDialogClosed() {
-  selectedDate.value = null
-  selectedSlot.value = ''
-  loadingSlots.value = false
-  hasData.value = false
+  selectedDate.value = null; selectedSlot.value = ''; loadingSlots.value = false; hasData.value = false
 }
 
-/** 日期选择器的禁用规则：禁用过去 + 无可用槽位的日期 */
 function disabledDateFn(date) {
-  // 禁用今天之前
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  const today = new Date(); today.setHours(0,0,0,0)
   if (date.getTime() < today.getTime()) return true
-  // 如果没有预加载可用日期列表，则不禁用（但后端会校验）
   if (!availableDates.value.length) return false
-  // 转换为 YYYY-MM-DD 比较
-  const dateStr = date.toISOString().slice(0, 10)
-  return !availableDates.value.includes(dateStr)
+  return !availableDates.value.includes(date.toISOString().slice(0, 10))
 }
 
-/** 选择日期后，请求该日期的可用时间槽 */
 async function onDateChange(date) {
   if (!date || !coachId.value) return
   selectedSlot.value = ''
-  loadingSlots.value = true
-  hasData.value = false
+  loadingSlots.value = true; hasData.value = false
   try {
     const dateStr = date.toISOString ? date.toISOString().slice(0, 10) : date
     const res = await studentApi().getCoachSlots(coachId.value, dateStr)
     const data = res.data
     morningAvailable.value = data.morning?.available || false
     morningSlots.value = data.morning?.slots || []
+    morningCapacity.value = data.morning?.capacity || 0
     afternoonAvailable.value = data.afternoon?.available || false
     afternoonSlots.value = data.afternoon?.slots || []
+    afternoonCapacity.value = data.afternoon?.capacity || 0
     hasData.value = true
   } catch (e) {
-    morningAvailable.value = false
-    morningSlots.value = []
-    afternoonAvailable.value = false
-    afternoonSlots.value = []
+    morningAvailable.value = false; morningSlots.value = []; morningCapacity.value = 0
+    afternoonAvailable.value = false; afternoonSlots.value = []; afternoonCapacity.value = 0
     hasData.value = true
   } finally {
     loadingSlots.value = false
   }
 }
 
-/** 选中一个时间槽 */
+/** 选中一个时间槽（不可用的槽不可选） */
 function selectSlot(slot) {
-  selectedSlot.value = slot
+  if (!slot.available) return
+  selectedSlot.value = slot.time
 }
 
-/** 提交约课 */
 async function submitAppointment() {
   if (!selectedDate.value || !selectedSlot.value) {
-    ElMessage.warning('请选择日期和时间段')
-    return
+    ElMessage.warning('请选择日期和时间段'); return
   }
   try {
     const dateStr = selectedDate.value.toISOString
-      ? selectedDate.value.toISOString().slice(0, 10)
-      : selectedDate.value
+      ? selectedDate.value.toISOString().slice(0, 10) : selectedDate.value
     await studentApi().createAppointment({
       studentId: studentInfoId.value,
       coachId: coachId.value,
-      appointmentTime: selectedSlot.value,    // 如 "08:00-10:00"
-      appointmentDate: dateStr                 // 如 "2024-06-17"
+      appointmentTime: selectedSlot.value,
+      appointmentDate: dateStr
     })
     ElMessage.success('约课申请已提交')
     showDialog.value = false
-    // 刷新约课列表 + 可用日期缓存（刚约的日期可能不再可用）
     const res = await studentApi().getMyAppointments()
     appointments.value = res.data || []
     await loadAvailableDates()
-  } catch (e) {
-    // 错误已在拦截器中 toast
-  }
+  } catch (e) {}
 }
 
-/** 取消约课 */
 async function handleCancel(row) {
   try {
     const { value: reason } = await ElMessageBox.prompt('请输入取消原因', '取消约课')
@@ -279,7 +263,6 @@ async function handleCancel(row) {
     ElMessage.success('取消成功')
     const res = await studentApi().getMyAppointments()
     appointments.value = res.data || []
-    // 取消后可能有新的可用日期，刷新缓存
     await loadAvailableDates()
   } catch (e) {}
 }
@@ -303,11 +286,48 @@ async function handleCancel(row) {
 .slot-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 12px;
   padding-left: 4px;
 }
-.slot-btn {
-  min-width: 120px;
+.slot-card {
+  border: 2px solid #dcdfe6;
+  border-radius: 10px;
+  padding: 12px 18px;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 140px;
+  text-align: center;
+}
+.slot-card:hover:not(.slot-full) {
+  border-color: #409eff;
+  background: #ecf5ff;
+}
+.slot-selected {
+  border-color: #409eff;
+  background: #ecf5ff;
+  box-shadow: 0 0 0 2px rgba(64,158,255,0.2);
+}
+.slot-full {
+  background: #f5f5f5;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.slot-time {
+  font-weight: 700;
+  font-size: 15px;
+  color: #303133;
+  margin-bottom: 6px;
+}
+.slot-capacity {
+  font-size: 12px;
+  color: #67C23A;
+}
+.slot-capacity strong {
+  color: #409EFF;
+}
+.slot-capacity.full-text {
+  color: #F56C6C;
+  font-weight: 600;
 }
 .empty-hint {
   color: #c0c4cc;
