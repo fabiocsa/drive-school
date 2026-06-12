@@ -1,24 +1,11 @@
 -- ============================================
 -- 驾校报名与学员管理系统 - 数据库初始化脚本
+-- 数据库 drive_school 由 JDBC URL 中 createDatabaseIfNotExist=true 自动创建
+-- 以下全部使用 CREATE TABLE IF NOT EXISTS（幂等，重复启动不丢数据）
 -- ============================================
 
-CREATE DATABASE IF NOT EXISTS drive_school DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE drive_school;
-
 -- 用户表
-DROP TABLE IF EXISTS `exam_registration`;
-DROP TABLE IF EXISTS `appointment`;
-DROP TABLE IF EXISTS `training_hour`;
-DROP TABLE IF EXISTS `learning_phase`;
-DROP TABLE IF EXISTS `student_info`;
-DROP TABLE IF EXISTS `coach`;
-DROP TABLE IF EXISTS `fee_standard`;
-DROP TABLE IF EXISTS `exam_location`;
-DROP TABLE IF EXISTS `subject`;
-DROP TABLE IF EXISTS `vehicle_type`;
-DROP TABLE IF EXISTS `user`;
-
-CREATE TABLE `user` (
+CREATE TABLE IF NOT EXISTS `user` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
     `username` VARCHAR(50) NOT NULL,
     `password` VARCHAR(200) NOT NULL,
@@ -32,7 +19,7 @@ CREATE TABLE `user` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 车型表
-CREATE TABLE `vehicle_type` (
+CREATE TABLE IF NOT EXISTS `vehicle_type` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
     `name` VARCHAR(20) NOT NULL COMMENT 'C1, C2, B2等',
     `min_age` INT NOT NULL DEFAULT 18,
@@ -42,7 +29,7 @@ CREATE TABLE `vehicle_type` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 科目表
-CREATE TABLE `subject` (
+CREATE TABLE IF NOT EXISTS `subject` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
     `name` VARCHAR(50) NOT NULL COMMENT '科目一~科目四',
     `sort_order` INT NOT NULL,
@@ -51,7 +38,7 @@ CREATE TABLE `subject` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 考场表
-CREATE TABLE `exam_location` (
+CREATE TABLE IF NOT EXISTS `exam_location` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
     `name` VARCHAR(100) NOT NULL,
     `address` VARCHAR(200) DEFAULT NULL,
@@ -61,7 +48,7 @@ CREATE TABLE `exam_location` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 费用标准表
-CREATE TABLE `fee_standard` (
+CREATE TABLE IF NOT EXISTS `fee_standard` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
     `item_name` VARCHAR(50) NOT NULL COMMENT '报名费/考试费/补考费',
     `fee_type` VARCHAR(30) NOT NULL COMMENT 'REGISTRATION/EXAM/RETAKE',
@@ -70,7 +57,7 @@ CREATE TABLE `fee_standard` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 学员信息表
-CREATE TABLE `student_info` (
+CREATE TABLE IF NOT EXISTS `student_info` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
     `user_id` BIGINT NOT NULL,
     `id_card` VARCHAR(18) DEFAULT NULL,
@@ -86,6 +73,8 @@ CREATE TABLE `student_info` (
     `coach_id` BIGINT DEFAULT NULL,
     `assign_status` VARCHAR(20) NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING/ASSIGNED',
     `cert_status` VARCHAR(20) NOT NULL DEFAULT 'NONE' COMMENT 'NONE/WAITING/ISSUED',
+    `audited_by` VARCHAR(50) DEFAULT NULL COMMENT '审核人用户名',
+    `audited_time` DATETIME DEFAULT NULL COMMENT '审核时间',
     `registration_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     KEY `idx_user_id` (`user_id`),
@@ -94,7 +83,7 @@ CREATE TABLE `student_info` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 教练表
-CREATE TABLE `coach` (
+CREATE TABLE IF NOT EXISTS `coach` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
     `user_id` BIGINT NOT NULL,
     `gender` VARCHAR(10) DEFAULT NULL,
@@ -106,7 +95,7 @@ CREATE TABLE `coach` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 学时记录表
-CREATE TABLE `training_hour` (
+CREATE TABLE IF NOT EXISTS `training_hour` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
     `student_id` BIGINT NOT NULL,
     `coach_id` BIGINT NOT NULL,
@@ -120,7 +109,7 @@ CREATE TABLE `training_hour` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 约课表
-CREATE TABLE `appointment` (
+CREATE TABLE IF NOT EXISTS `appointment` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
     `student_id` BIGINT NOT NULL,
     `coach_id` BIGINT NOT NULL,
@@ -135,7 +124,7 @@ CREATE TABLE `appointment` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 学习阶段表
-CREATE TABLE `learning_phase` (
+CREATE TABLE IF NOT EXISTS `learning_phase` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
     `student_id` BIGINT NOT NULL,
     `current_phase` VARCHAR(20) NOT NULL DEFAULT 'PHASE1' COMMENT 'PHASE1/PHASE2/PHASE3/PHASE4/COMPLETED',
@@ -152,7 +141,7 @@ CREATE TABLE `learning_phase` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 考试报名表
-CREATE TABLE `exam_registration` (
+CREATE TABLE IF NOT EXISTS `exam_registration` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
     `student_id` BIGINT NOT NULL,
     `subject_id` BIGINT NOT NULL,
@@ -167,3 +156,10 @@ CREATE TABLE `exam_registration` (
     KEY `idx_student_id` (`student_id`),
     KEY `idx_subject_id` (`subject_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================
+-- 增量迁移（已有数据库升级用）
+-- 重复启动时列已存在会报错，但 application-dev.yml 设了 continue-on-error: true，自动跳过
+-- ============================================
+ALTER TABLE `student_info` ADD COLUMN `audited_by` VARCHAR(50) DEFAULT NULL COMMENT '审核人用户名' AFTER `cert_status`;
+ALTER TABLE `student_info` ADD COLUMN `audited_time` DATETIME DEFAULT NULL COMMENT '审核时间' AFTER `audited_by`;

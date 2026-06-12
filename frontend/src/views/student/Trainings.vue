@@ -21,12 +21,8 @@ const records = ref([])
 
 onMounted(async () => {
   try {
-    const infoRes = await studentApi().getMyInfo(userStore.userId)
-    const studentId = infoRes.data?.studentInfo?.id
-    if (studentId) {
-      const res = await studentApi().getTrainings(studentId)
-      records.value = res.data || []
-    }
+    const res = await studentApi().getTrainings()
+    records.value = res.data || []
   } catch (e) {}
 })
 </script>

@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.driveschool.entity.StudentInfo;
 import com.driveschool.entity.User;
 import com.driveschool.mapper.*;
+import com.driveschool.security.SecurityUtils;
 import com.driveschool.util.Result;
 import org.springframework.web.bind.annotation.*;
 
@@ -50,10 +51,31 @@ public class CommonController {
         return Result.ok(examLocationMapper.selectList(null));
     }
 
+    /**
+     * 获取教练名下学员列表。
+     * 仅允许教练本人或管理员查看，防止越权访问。
+     * 前端调用时不再传递 userId，后端从 JWT 中获取当前用户身份。
+     */
     @GetMapping("/coaches/students")
-    public Result<?> getCoachStudents(@RequestParam Long userId) {
+    public Result<?> getCoachStudents() {
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        String currentRole = SecurityUtils.getCurrentRole();
+        if (currentUserId == null) {
+            return Result.fail("未登录或登录已过期");
+        }
+
+        // 从 JWT 获取的 userId 即为当前教练的 userId（管理员也可查看）
+        Long coachUserId;
+        if ("ROLE_ADMIN".equals(currentRole)) {
+            // 管理员需要传入要查看的教练userId（此处取当前登录用户自己的数据无意义，管理员通常通过 admin 接口管理）
+            // 如果没有明确要查谁，返回空
+            return Result.ok(Collections.emptyList());
+        } else {
+            coachUserId = currentUserId;
+        }
+
         com.driveschool.entity.Coach coach = coachMapper.selectOne(
-                new LambdaQueryWrapper<com.driveschool.entity.Coach>().eq(com.driveschool.entity.Coach::getUserId, userId));
+                new LambdaQueryWrapper<com.driveschool.entity.Coach>().eq(com.driveschool.entity.Coach::getUserId, coachUserId));
         if (coach == null) return Result.ok(Collections.emptyList());
 
         List<StudentInfo> students = studentInfoMapper.selectList(
@@ -65,7 +87,6 @@ public class CommonController {
             User u = userMapper.selectById(si.getUserId());
             map.put("realName", u != null ? u.getRealName() : "");
             map.put("phone", u != null ? u.getPhone() : "");
-            // 包含学习阶段信息
             com.driveschool.entity.LearningPhase phase = learningPhaseMapper.selectOne(
                     new LambdaQueryWrapper<com.driveschool.entity.LearningPhase>()
                             .eq(com.driveschool.entity.LearningPhase::getStudentId, si.getId()));

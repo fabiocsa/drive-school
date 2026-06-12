@@ -57,10 +57,10 @@ const statusMap = { PENDING: '待确认', CONFIRMED: '已确认', CANCELLED: '�
 
 onMounted(async () => {
   try {
-    const infoRes = await studentApi().getMyInfo(userStore.userId)
+    const infoRes = await studentApi().getMyInfo()
     studentInfoId.value = infoRes.data?.studentInfo?.id
     coachId.value = infoRes.data?.studentInfo?.coachId
-    const res = await studentApi().getMyAppointments(userStore.userId)
+    const res = await studentApi().getMyAppointments()
     appointments.value = res.data || []
   } catch (e) {}
 })
@@ -78,16 +78,16 @@ async function submitAppointment() {
   })
   ElMessage.success('约课申请已提交')
   showDialog.value = false
-  const res = await studentApi().getMyAppointments(userStore.userId)
+  const res = await studentApi().getMyAppointments()
   appointments.value = res.data || []
 }
 
 async function handleCancel(row) {
   try {
     const { value: reason } = await ElMessageBox.prompt('请输入取消原因', '取消约课')
-    await studentApi().cancelAppointment(row.id, { userId: userStore.userId, reason: reason || '' })
+    await studentApi().cancelAppointment(row.id, { reason: reason || '' })
     ElMessage.success('取消成功')
-    const res = await studentApi().getMyAppointments(userStore.userId)
+    const res = await studentApi().getMyAppointments()
     appointments.value = res.data || []
   } catch (e) {}
 }

@@ -1,7 +1,34 @@
 <template>
   <div>
     <h2>学员管理</h2>
-    <el-table :data="students" border style="margin-top:20px">
+
+    <!-- 筛选栏 + 批量操作 -->
+    <el-row :gutter="10" style="margin:16px 0">
+      <el-col :span="4">
+        <el-select v-model="filterMedical" placeholder="体检状态筛选" clearable>
+          <el-option label="全部" value="" />
+          <el-option label="待体检" value="PENDING" />
+          <el-option label="已体检" value="PASSED" />
+          <el-option label="不合格" value="FAILED" />
+        </el-select>
+      </el-col>
+      <el-col :span="4">
+        <el-select v-model="filterAudit" placeholder="审核状态筛选" clearable>
+          <el-option label="全部" value="" />
+          <el-option label="待审核" value="PENDING" />
+          <el-option label="已通过" value="APPROVED" />
+          <el-option label="未通过" value="REJECTED" />
+        </el-select>
+      </el-col>
+      <el-col :span="4" :offset="12" style="text-align:right">
+        <el-button type="warning" :disabled="selectedIds.length === 0" @click="batchAuditDialog">
+          批量审核 ({{ selectedIds.length }})
+        </el-button>
+      </el-col>
+    </el-row>
+
+    <el-table :data="filteredStudents" border @selection-change="handleSelectionChange" ref="tableRef">
+      <el-table-column type="selection" width="50" />
       <el-table-column prop="id" label="ID" width="60" />
       <el-table-column prop="realName" label="姓名" width="100" />
       <el-table-column prop="phone" label="电话" width="130" />
@@ -12,7 +39,7 @@
       <el-table-column label="审核状态" width="100">
         <template #default="{row}">
           <el-tag :type="row.auditStatus === 'APPROVED' ? 'success' : row.auditStatus === 'REJECTED' ? 'danger' : 'warning'">
-            {{ statusMap[row.auditStatus] }}
+            {{ statusMap[row.auditStatus] || row.auditStatus }}
           </el-tag>
         </template>
       </el-table-column>
@@ -23,42 +50,111 @@
           </el-tag>
         </template>
       </el-table-column>
+      <el-table-column label="审核人" width="100">
+        <template #default="{row}">{{ row.auditedBy || '-' }}</template>
+      </el-table-column>
+      <el-table-column label="审核时间" width="160">
+        <template #default="{row}">{{ row.auditedTime || '-' }}</template>
+      </el-table-column>
       <el-table-column label="分配" width="80">
         <template #default="{row}">{{ row.assignStatus === 'ASSIGNED' ? '已分配' : '待分配' }}</template>
       </el-table-column>
       <el-table-column prop="registrationTime" label="报名时间" width="180" />
-      <el-table-column label="操作" width="280">
+      <el-table-column label="备注" min-width="120">
+        <template #default="{row}">{{ row.auditRemark || '' }}</template>
+      </el-table-column>
+      <el-table-column label="操作" width="280" fixed="right">
         <template #default="{row}">
-          <el-button v-if="row.auditStatus === 'PENDING'" type="primary" size="small" @click="auditDialog(row)">审核</el-button>
-          <el-button v-if="row.auditStatus === 'APPROVED' && row.assignStatus === 'PENDING'" type="success" size="small" @click="assignDialog(row)">分配教练</el-button>
+          <el-button v-if="row.auditStatus === 'PENDING' || row.auditStatus === 'REJECTED'"
+                     type="primary" size="small" @click="auditDialog(row)">审核</el-button>
+          <el-button v-if="row.auditStatus === 'APPROVED' && row.assignStatus === 'PENDING'"
+                     type="success" size="small" @click="assignDialog(row)">分配教练</el-button>
         </template>
       </el-table-column>
     </el-table>
 
-    <el-dialog v-model="showAudit" title="审核学员" width="400px">
+    <!-- ========== 单个审核对话框（两步流程） ========== -->
+    <el-dialog v-model="showAudit" title="审核学员" width="500px">
+      <el-alert :title="'学员: ' + currentStudent?.realName + ' | 身份证: ' + currentStudent?.idCard"
+                type="info" :closable="false" style="margin-bottom:16px" />
+
+      <!-- 第一步：体检状态 -->
+      <el-divider content-position="left">第一步：确认体检状态</el-divider>
       <el-form>
         <el-form-item label="体检状态">
           <el-radio-group v-model="auditForm.medicalStatus">
             <el-radio label="PASSED">合格</el-radio>
             <el-radio label="FAILED">不合格</el-radio>
+            <el-radio label="PENDING">待体检</el-radio>
           </el-radio-group>
         </el-form-item>
+      </el-form>
+
+      <!-- 第二步：审核决定 -->
+      <el-divider content-position="left">第二步：审核决定</el-divider>
+      <el-form>
         <el-form-item label="审核结果">
           <el-radio-group v-model="auditForm.status">
             <el-radio label="APPROVED">通过</el-radio>
-            <el-radio label="REJECTED">不通过</el-radio>
+            <el-radio label="REJECTED">驳回</el-radio>
           </el-radio-group>
         </el-form-item>
-        <el-form-item label="备注">
-          <el-input v-model="auditForm.remark" type="textarea" />
+        <el-alert v-if="auditForm.status === 'APPROVED' && auditForm.medicalStatus !== 'PASSED'"
+                  title="体检未合格，无法审核通过" type="error" :closable="false" show-icon style="margin-bottom:12px" />
+        <el-form-item label="审核备注">
+          <el-input v-model="auditForm.remark" type="textarea" :rows="3"
+                    placeholder="审核通过可不填，驳回请填写原因" />
         </el-form-item>
       </el-form>
+
       <template #footer>
         <el-button @click="showAudit = false">取消</el-button>
-        <el-button type="primary" @click="submitAudit">确认审核</el-button>
+        <el-button type="primary" @click="submitAudit"
+                   :disabled="auditForm.status === 'APPROVED' && auditForm.medicalStatus !== 'PASSED'">
+          确认审核
+        </el-button>
       </template>
     </el-dialog>
 
+    <!-- ========== 批量审核对话框 ========== -->
+    <el-dialog v-model="showBatchAudit" title="批量审核" width="500px">
+      <el-alert :title="'已选择 ' + selectedIds.length + ' 名学员'" type="warning" :closable="false" style="margin-bottom:16px" />
+
+      <el-divider content-position="left">第一步：确认体检状态</el-divider>
+      <el-form>
+        <el-form-item label="体检状态">
+          <el-radio-group v-model="batchForm.medicalStatus">
+            <el-radio label="PASSED">合格</el-radio>
+            <el-radio label="FAILED">不合格</el-radio>
+            <el-radio label="">不修改</el-radio>
+          </el-radio-group>
+        </el-form-item>
+      </el-form>
+
+      <el-divider content-position="left">第二步：审核决定</el-divider>
+      <el-form>
+        <el-form-item label="审核结果">
+          <el-radio-group v-model="batchForm.status">
+            <el-radio label="APPROVED">通过</el-radio>
+            <el-radio label="REJECTED">驳回</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-alert v-if="batchForm.status === 'APPROVED' && batchForm.medicalStatus !== 'PASSED'"
+                  title="注意：部分学员可能因体检未合格被跳过" type="warning" :closable="false" show-icon style="margin-bottom:12px" />
+        <el-form-item label="审核备注">
+          <el-input v-model="batchForm.remark" type="textarea" :rows="3" placeholder="批量审核备注（所有选中学员共用）" />
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="showBatchAudit = false">取消</el-button>
+        <el-button type="primary" @click="submitBatchAudit" :loading="batchLoading">
+          确认批量审核
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- ========== 分配教练对话框 ========== -->
     <el-dialog v-model="showAssign" title="分配教练" width="500px">
       <h4>推荐教练（按评分排序）</h4>
       <el-table :data="recommendedCoaches" border @row-click="selectCoach">
@@ -80,27 +176,46 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { adminApi, commonApi } from '../../api'
 import { ElMessage } from 'element-plus'
 
 const students = ref([])
 const showAudit = ref(false)
+const showBatchAudit = ref(false)
 const showAssign = ref(false)
 const currentStudent = ref(null)
 const recommendedCoaches = ref([])
 const selectedCoachId = ref(null)
+const selectedIds = ref([])
+const batchLoading = ref(false)
 const vehicleTypeMap = ref({})
+const filterMedical = ref('')
+const filterAudit = ref('')
 
 const statusMap = { PENDING: '待审核', APPROVED: '已通过', REJECTED: '未通过' }
+
 const auditForm = reactive({ medicalStatus: 'PASSED', status: 'APPROVED', remark: '' })
+const batchForm = reactive({ medicalStatus: 'PASSED', status: 'APPROVED', remark: '' })
+
+/** 前端筛选后的学员列表 */
+const filteredStudents = computed(() => {
+  let list = students.value
+  if (filterMedical.value) {
+    list = list.filter(s => s.medicalStatus === filterMedical.value)
+  }
+  if (filterAudit.value) {
+    list = list.filter(s => s.auditStatus === filterAudit.value)
+  }
+  return list
+})
 
 onMounted(async () => {
   await loadStudents()
   try {
     const vtRes = await commonApi().listVehicleTypes()
-    (vtRes.data || []).forEach(v => { vehicleTypeMap.value[v.id] = v.name })
-  } catch (e) {}
+    ;(vtRes.data || []).forEach(v => { vehicleTypeMap.value[v.id] = v.name })
+  } catch (e) { /* ignore */ }
 })
 
 function getVehicleTypeName(id) {
@@ -111,27 +226,69 @@ async function loadStudents() {
   try {
     const res = await adminApi().listStudents()
     students.value = res.data || []
-  } catch (e) {}
+  } catch (e) { /* ignore */ }
 }
+
+function handleSelectionChange(selection) {
+  selectedIds.value = selection.map(s => s.id)
+}
+
+// ==================== 单个审核 ====================
 
 function auditDialog(row) {
   currentStudent.value = row
-  auditForm.medicalStatus = row.medicalStatus === 'PASSED' ? 'PASSED' : 'PASSED'
+  auditForm.medicalStatus = row.medicalStatus === 'PASSED' ? 'PASSED' : (row.medicalStatus || 'PENDING')
   auditForm.status = 'APPROVED'
   auditForm.remark = ''
   showAudit.value = true
 }
 
 async function submitAudit() {
-  await adminApi().auditStudent(currentStudent.value.id, {
-    medicalStatus: auditForm.medicalStatus,
-    status: auditForm.status,
-    remark: auditForm.remark
-  })
-  ElMessage.success('审核完成')
-  showAudit.value = false
-  await loadStudents()
+  if (auditForm.status === 'APPROVED' && auditForm.medicalStatus !== 'PASSED') {
+    ElMessage.warning('体检未合格，无法审核通过')
+    return
+  }
+  try {
+    await adminApi().auditStudent(currentStudent.value.id, {
+      medicalStatus: auditForm.medicalStatus,
+      status: auditForm.status,
+      remark: auditForm.remark
+    })
+    ElMessage.success('审核完成')
+    showAudit.value = false
+    await loadStudents()
+  } catch (e) { /* error handled by interceptor */ }
 }
+
+// ==================== 批量审核 ====================
+
+function batchAuditDialog() {
+  batchForm.medicalStatus = 'PASSED'
+  batchForm.status = 'APPROVED'
+  batchForm.remark = ''
+  showBatchAudit.value = true
+}
+
+async function submitBatchAudit() {
+  batchLoading.value = true
+  try {
+    const medicalStatus = batchForm.medicalStatus || null
+    const res = await adminApi().batchAudit({
+      ids: selectedIds.value,
+      medicalStatus: medicalStatus,
+      status: batchForm.status,
+      remark: batchForm.remark
+    })
+    const data = res.data
+    ElMessage.success(`批量审核完成: ${data.successCount}/${data.totalCount} 成功`)
+    showBatchAudit.value = false
+    selectedIds.value = []
+    await loadStudents()
+  } catch (e) { /* error handled by interceptor */ }
+  finally { batchLoading.value = false }
+}
+
+// ==================== 分配教练 ====================
 
 async function assignDialog(row) {
   currentStudent.value = row
@@ -139,7 +296,7 @@ async function assignDialog(row) {
   try {
     const res = await adminApi().recommendCoaches(row.id)
     recommendedCoaches.value = res.data || []
-  } catch (e) {}
+  } catch (e) { /* ignore */ }
   showAssign.value = true
 }
 

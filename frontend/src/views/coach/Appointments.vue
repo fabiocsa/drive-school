@@ -33,15 +33,15 @@ const statusMap = { PENDING: '待确认', CONFIRMED: '已确认', CANCELLED: '�
 
 onMounted(async () => {
   try {
-    const res = await coachApi().getAppointments(userStore.userId)
+    const res = await coachApi().getAppointments()
     appointments.value = res.data || []
   } catch (e) {}
 })
 
 async function confirmAppt(row) {
-  await coachApi().confirmAppointment(row.id, userStore.userId)
+  await coachApi().confirmAppointment(row.id)
   ElMessage.success('确认成功')
-  const res = await coachApi().getAppointments(userStore.userId)
+  const res = await coachApi().getAppointments()
   appointments.value = res.data || []
 }
 </script>

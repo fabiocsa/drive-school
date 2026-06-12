@@ -69,7 +69,7 @@ const form = reactive({ studentId: null, duration: 0.5, content: '', recordDate:
 
 onMounted(async () => {
   try {
-    const res = await commonApi().getCoachStudents(userStore.userId)
+    const res = await commonApi().getCoachStudents()
     myStudents.value = res.data || []
   } catch (e) {}
 })
@@ -96,7 +96,7 @@ async function recordTraining() {
     return
   }
   try {
-    const infoRes = await coachApi().getMyInfo(userStore.userId)
+    const infoRes = await coachApi().getMyInfo()
     const coachId = infoRes.data?.coach?.id
     const data = {
       studentId: form.studentId,
@@ -109,7 +109,7 @@ async function recordTraining() {
     ElMessage.success('学时记录成功')
     await loadRecords(form.studentId)
     // 刷新学员列表以更新阶段
-    const res = await commonApi().getCoachStudents(userStore.userId)
+    const res = await commonApi().getCoachStudents()
     myStudents.value = res.data || []
   } catch (e) {}
 }
@@ -123,7 +123,7 @@ async function adjustPhase() {
     await coachApi().adjustPhase(form.studentId, { newPhase: selectedPhase.value })
     ElMessage.success('阶段调整成功')
     currentPhase.value = selectedPhase.value
-    const res = await commonApi().getCoachStudents(userStore.userId)
+    const res = await commonApi().getCoachStudents()
     myStudents.value = res.data || []
   } catch (e) {}
 }

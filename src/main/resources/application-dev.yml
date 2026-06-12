@@ -1,0 +1,9 @@
+# ============================================
+# 开发环境配置
+# 使用方式: mvn spring-boot:run -Dspring-boot.run.profiles=dev
+# ============================================
+spring:
+  sql:
+    init:
+      mode: always           # 开发环境自动执行 schema.sql + data.sql
+      continue-on-error: true # 表/数据已存在时跳过，不中断启动

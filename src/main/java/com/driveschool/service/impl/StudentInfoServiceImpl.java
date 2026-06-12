@@ -88,59 +88,58 @@ public class StudentInfoServiceImpl extends ServiceImpl<StudentInfoMapper, Stude
         }
     }
 
+    /**
+     * 自动审核：仅校验车型存在性 + 年龄最低要求。
+     * - 不通过 → REJECTED（写明原因）
+     * - 通过 → 保持 PENDING（等待管理员人工审核）
+     * 不再在此处检查体检状态，不再创建 LearningPhase 和 PDF。
+     */
     @Override
     @Transactional
     public void autoAudit(StudentInfo info) {
         if (!"PENDING".equals(info.getAuditStatus())) return;
 
-        boolean passed = true;
-        StringBuilder reasons = new StringBuilder();
-
         VehicleType vt = vehicleTypeMapper.selectById(info.getVehicleTypeId());
         if (vt == null || vt.getEnabled() == 0) {
-            passed = false;
-            reasons.append("报考车型不存在或已停用; ");
-        } else {
-            int age = calculateAge(info.getIdCard());
-            if (age < vt.getMinAge()) {
-                passed = false;
-                reasons.append("年龄不满足报考车型最低要求(需").append(vt.getMinAge()).append("岁); ");
-            }
+            info.setAuditStatus("REJECTED");
+            info.setAuditRemark("报考车型不存在或已停用");
+            updateById(info);
+            return;
         }
 
-        if (!"PASSED".equals(info.getMedicalStatus())) {
-            passed = false;
-            reasons.append("体检未合格; ");
+        int age = calculateAge(info.getIdCard());
+        if (vt.getMinAge() != null && age < vt.getMinAge()) {
+            info.setAuditStatus("REJECTED");
+            info.setAuditRemark("年龄不满足报考车型最低要求(需" + vt.getMinAge() + "岁)");
+            updateById(info);
+            return;
         }
 
-        String auditStatus = passed ? "APPROVED" : "REJECTED";
-        info.setAuditStatus(auditStatus);
-        if (!passed) {
-            info.setAuditRemark(reasons.toString());
-        } else {
-            info.setAuditRemark("自动审核通过");
-        }
+        // 自动校验通过，保持 PENDING 等待管理员人工审核
+        info.setAuditRemark("自动校验通过(车型/年龄)，等待管理员审核");
         updateById(info);
-
-        if (passed) {
-            createLearningPhase(info.getId());
-            try {
-                pdfGenerator.generateRegistrationForm(info, userMapper.selectById(info.getUserId()));
-                pdfGenerator.generateHealthReport(info, userMapper.selectById(info.getUserId()));
-                pdfGenerator.generateExamCard(info, userMapper.selectById(info.getUserId()));
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
     }
 
+    /**
+     * 管理员手动审核。
+     * - APPROVED: 必须体检 PASSED → 创建 LearningPhase + 生成 PDF → 记录审核日志
+     * - REJECTED: 填写原因 → 记录审核日志
+     */
     @Override
     @Transactional
-    public void adminAudit(Long studentId, String status, String remark) {
+    public void adminAudit(Long studentId, String status, String remark,
+                           String medicalStatus, String auditedBy) {
         StudentInfo info = getById(studentId);
         if (info == null) throw new RuntimeException("学员信息不存在");
+
+        // 仅 PENDING 和 REJECTED(重新审核) 状态允许审核
         if (!"PENDING".equals(info.getAuditStatus()) && !"REJECTED".equals(info.getAuditStatus())) {
             throw new RuntimeException("当前状态不可审核");
+        }
+
+        // 先更新体检状态（如果传入）
+        if (medicalStatus != null && !medicalStatus.isEmpty()) {
+            info.setMedicalStatus(medicalStatus);
         }
 
         if ("APPROVED".equals(status)) {
@@ -148,8 +147,12 @@ public class StudentInfoServiceImpl extends ServiceImpl<StudentInfoMapper, Stude
                 throw new RuntimeException("体检未合格，无法通过审核");
             }
             info.setAuditStatus("APPROVED");
-            info.setAuditRemark(remark != null ? remark : "管理员审核通过");
+            info.setAuditRemark(remark != null && !remark.isEmpty() ? remark : "管理员审核通过");
+            info.setAuditedBy(auditedBy);
+            info.setAuditedTime(java.time.LocalDateTime.now());
             updateById(info);
+
+            // 审核通过后创建学习阶段并生成 PDF
             createLearningPhase(info.getId());
             try {
                 User user = userMapper.selectById(info.getUserId());
@@ -161,9 +164,27 @@ public class StudentInfoServiceImpl extends ServiceImpl<StudentInfoMapper, Stude
             }
         } else if ("REJECTED".equals(status)) {
             info.setAuditStatus("REJECTED");
-            info.setAuditRemark(remark != null ? remark : "管理员审核不通过");
+            info.setAuditRemark(remark != null && !remark.isEmpty() ? remark : "管理员审核不通过");
+            info.setAuditedBy(auditedBy);
+            info.setAuditedTime(java.time.LocalDateTime.now());
             updateById(info);
         }
+    }
+
+    @Override
+    @Transactional
+    public int batchAudit(java.util.List<Long> ids, String status, String remark,
+                          String medicalStatus, String auditedBy) {
+        int successCount = 0;
+        for (Long id : ids) {
+            try {
+                adminAudit(id, status, remark, medicalStatus, auditedBy);
+                successCount++;
+            } catch (Exception e) {
+                // 单个失败不影响其他，继续处理
+            }
+        }
+        return successCount;
     }
 
     @Override
@@ -250,6 +271,18 @@ public class StudentInfoServiceImpl extends ServiceImpl<StudentInfoMapper, Stude
         } catch (Exception e) {
             return 0;
         }
+    }
+
+    @Override
+    public Long getStudentInfoIdByUserId(Long userId) {
+        StudentInfo info = getOne(new LambdaQueryWrapper<StudentInfo>().eq(StudentInfo::getUserId, userId));
+        return info != null ? info.getId() : null;
+    }
+
+    @Override
+    public boolean isStudentOwnedByUser(Long studentInfoId, Long userId) {
+        StudentInfo info = getById(studentInfoId);
+        return info != null && info.getUserId().equals(userId);
     }
 
     private void createLearningPhase(Long studentId) {

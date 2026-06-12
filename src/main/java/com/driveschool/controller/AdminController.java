@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.driveschool.entity.*;
 import com.driveschool.mapper.*;
+import com.driveschool.security.SecurityUtils;
 import com.driveschool.service.*;
 import com.driveschool.util.Result;
 import org.springframework.web.bind.annotation.*;
@@ -71,6 +72,8 @@ public class AdminController {
             map.put("coachId", si.getCoachId());
             map.put("assignStatus", si.getAssignStatus());
             map.put("certStatus", si.getCertStatus());
+            map.put("auditedBy", si.getAuditedBy());
+            map.put("auditedTime", si.getAuditedTime() != null ? si.getAuditedTime().toString() : null);
             map.put("registrationTime", si.getRegistrationTime());
             User u = userMapper.selectById(si.getUserId());
             map.put("realName", u != null ? u.getRealName() : "");
@@ -80,18 +83,45 @@ public class AdminController {
         return Result.ok(result);
     }
 
+    /**
+     * 单个学员审核（支持同时设置体检状态和审核结果，操作人和时间自动记录）
+     */
     @PutMapping("/students/audit/{id}")
     public Result<?> auditStudent(@PathVariable Long id, @RequestBody Map<String, String> data) {
         String medicalStatus = data.get("medicalStatus");
         String status = data.get("status");
         String remark = data.get("remark");
-        StudentInfo info = studentInfoMapper.selectById(id);
-        if (info != null && medicalStatus != null) {
-            info.setMedicalStatus(medicalStatus);
-            studentInfoMapper.updateById(info);
-        }
-        studentInfoService.adminAudit(id, status, remark);
+        String auditedBy = SecurityUtils.getCurrentUsername();
+        if (auditedBy == null) auditedBy = "system";
+        studentInfoService.adminAudit(id, status, remark, medicalStatus, auditedBy);
         return Result.ok();
+    }
+
+    /**
+     * 批量审核学员
+     */
+    @PutMapping("/students/batch-audit")
+    public Result<?> batchAudit(@RequestBody Map<String, Object> data) {
+        @SuppressWarnings("unchecked")
+        List<Integer> idInts = (List<Integer>) data.get("ids");
+        String medicalStatus = (String) data.get("medicalStatus");
+        String status = (String) data.get("status");
+        String remark = (String) data.get("remark");
+        if (idInts == null || idInts.isEmpty()) {
+            return Result.fail("请选择要审核的学员");
+        }
+        if (status == null || status.isEmpty()) {
+            return Result.fail("请选择审核结果");
+        }
+        String auditedBy = SecurityUtils.getCurrentUsername();
+        if (auditedBy == null) auditedBy = "system";
+
+        List<Long> ids = new java.util.ArrayList<>();
+        for (Integer i : idInts) {
+            ids.add(i.longValue());
+        }
+        int count = studentInfoService.batchAudit(ids, status, remark, medicalStatus, auditedBy);
+        return Result.ok(Map.of("successCount", count, "totalCount", ids.size()));
     }
 
     @GetMapping("/students/{id}/recommend-coaches")

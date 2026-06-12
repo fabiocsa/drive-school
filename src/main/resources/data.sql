@@ -1,9 +1,9 @@
 -- ============================================
--- 驾校报名与学员管理系统 - 初始化数据
--- 用户账号由 DataInitializer 通过 BCrypt 初始化
+-- 驾校报名与学员管理系统 - 静态基础数据
+-- 分工：本文件负责车型/科目/考场/费用标准（INSERT IGNORE，可重复执行）
+--       用户账号（admin/coach/student）由 DataInitializer 通过 BCrypt 创建
+-- 所有 INSERT 均使用 IGNORE，重复启动不会重复插入
 -- ============================================
-
-USE drive_school;
 
 -- 车型
 INSERT IGNORE INTO `vehicle_type` (`name`, `min_age`, `subject_hours_json`) VALUES

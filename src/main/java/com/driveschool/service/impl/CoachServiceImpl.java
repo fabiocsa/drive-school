@@ -3,8 +3,10 @@ package com.driveschool.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.driveschool.entity.Coach;
+import com.driveschool.entity.StudentInfo;
 import com.driveschool.entity.User;
 import com.driveschool.mapper.CoachMapper;
+import com.driveschool.mapper.StudentInfoMapper;
 import com.driveschool.mapper.UserMapper;
 import com.driveschool.service.CoachService;
 import org.springframework.stereotype.Service;
@@ -15,9 +17,11 @@ import java.util.*;
 public class CoachServiceImpl extends ServiceImpl<CoachMapper, Coach> implements CoachService {
 
     private final UserMapper userMapper;
+    private final StudentInfoMapper studentInfoMapper;
 
-    public CoachServiceImpl(UserMapper userMapper) {
+    public CoachServiceImpl(UserMapper userMapper, StudentInfoMapper studentInfoMapper) {
         this.userMapper = userMapper;
+        this.studentInfoMapper = studentInfoMapper;
     }
 
     @Override
@@ -72,5 +76,16 @@ public class CoachServiceImpl extends ServiceImpl<CoachMapper, Coach> implements
         map.put("realName", user != null ? user.getRealName() : "");
         map.put("phone", user != null ? user.getPhone() : "");
         return map;
+    }
+
+    @Override
+    public Coach getCoachByUserId(Long userId) {
+        return getOne(new LambdaQueryWrapper<Coach>().eq(Coach::getUserId, userId));
+    }
+
+    @Override
+    public boolean isStudentAssignedToCoach(Long studentInfoId, Long coachId) {
+        StudentInfo info = studentInfoMapper.selectById(studentInfoId);
+        return info != null && info.getCoachId() != null && info.getCoachId().equals(coachId);
     }
 }

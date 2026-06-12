@@ -7,6 +7,7 @@ const routes = [
     path: '/student',
     name: 'StudentLayout',
     component: () => import('../views/layouts/StudentLayout.vue'),
+    meta: { role: 'ROLE_STUDENT' },
     children: [
       { path: '', name: 'StudentDashboard', component: () => import('../views/student/Dashboard.vue') },
       { path: 'registration', name: 'StudentRegistration', component: () => import('../views/student/Registration.vue') },
@@ -21,6 +22,7 @@ const routes = [
     path: '/coach',
     name: 'CoachLayout',
     component: () => import('../views/layouts/CoachLayout.vue'),
+    meta: { role: 'ROLE_COACH' },
     children: [
       { path: '', name: 'CoachDashboard', component: () => import('../views/coach/Dashboard.vue') },
       { path: 'training', name: 'CoachTraining', component: () => import('../views/coach/Training.vue') },
@@ -31,6 +33,7 @@ const routes = [
     path: '/admin',
     name: 'AdminLayout',
     component: () => import('../views/layouts/AdminLayout.vue'),
+    meta: { role: 'ROLE_ADMIN' },
     children: [
       { path: '', name: 'AdminDashboard', component: () => import('../views/admin/Dashboard.vue') },
       { path: 'students', name: 'AdminStudents', component: () => import('../views/admin/Students.vue') },
@@ -51,13 +54,34 @@ const router = createRouter({
 
 router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('token')
+  const role = localStorage.getItem('role')
+
+  // 公开页面直接放行
   if (to.path === '/login' || to.path === '/register') {
     next()
-  } else if (!token) {
-    next('/login')
-  } else {
-    next()
+    return
   }
+
+  // 未登录重定向到登录页
+  if (!token) {
+    next('/login')
+    return
+  }
+
+  // 角色校验：确保用户只能访问自己角色对应的路由
+  const requiredRole = to.matched[0]?.meta?.role
+  if (requiredRole && role !== requiredRole) {
+    // 用户角色不匹配，重定向到其角色对应的首页
+    const redirectMap = {
+      'ROLE_ADMIN': '/admin',
+      'ROLE_COACH': '/coach',
+      'ROLE_STUDENT': '/student'
+    }
+    next(redirectMap[role] || '/login')
+    return
+  }
+
+  next()
 })
 
 export default router

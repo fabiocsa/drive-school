@@ -60,12 +60,12 @@ const stats = reactive({ studentCount: 0, pendingAppointments: 0, todayAppointme
 
 onMounted(async () => {
   try {
-    const res = await coachApi().getMyInfo(userStore.userId)
+    const res = await coachApi().getMyInfo()
     info.value = res.data
 
     const [studentsRes, appointmentsRes] = await Promise.all([
-      commonApi().getCoachStudents(userStore.userId),
-      coachApi().getAppointments(userStore.userId)
+      commonApi().getCoachStudents(),
+      coachApi().getAppointments()
     ])
     const students = studentsRes.data || []
     const appointments = appointmentsRes.data || []

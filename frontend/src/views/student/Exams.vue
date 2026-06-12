@@ -57,13 +57,13 @@ const subjects = ref([])
 const locations = ref([])
 const showDialog = ref(false)
 
-const examForm = reactive({ userId: userStore.userId, subjectId: null, examLocationId: null, examDate: '' })
+const examForm = reactive({ subjectId: null, examLocationId: null, examDate: '' })
 const examStatusMap = { PENDING: '待审核', APPROVED: '已通过审核', REJECTED: '已拒绝', COMPLETED: '已完成' }
 
 onMounted(async () => {
   try {
     const [examRes, subjRes, locRes] = await Promise.all([
-      studentApi().getMyExams(userStore.userId),
+      studentApi().getMyExams(),
       commonApi().listSubjects(),
       commonApi().listExamLocations()
     ])
@@ -81,7 +81,7 @@ async function submitExam() {
   await studentApi().registerExam(examForm)
   ElMessage.success('考试报名已提交')
   showDialog.value = false
-  const res = await studentApi().getMyExams(userStore.userId)
+  const res = await studentApi().getMyExams()
   exams.value = res.data || []
 }
 </script>

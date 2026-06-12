@@ -27,19 +27,7 @@
 
 ## 快速启动
 
-### 1. 创建数据库并导入
-
-```sql
-CREATE DATABASE IF NOT EXISTS drive_school
-  DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE drive_school;
-SOURCE src/main/resources/schema.sql;
-SOURCE src/main/resources/data.sql;
-```
-
-`schema.sql` 会建表（含 DROP TABLE IF EXISTS，仅首次执行），`data.sql` 会插入车型、科目、考场、费用标准等基础数据（使用 `INSERT IGNORE` 可重复执行）。
-
-### 2. 修改数据库连接
+### 1. 修改数据库连接
 
 编辑 `src/main/resources/application.yml`：
 
@@ -51,14 +39,42 @@ spring:
     password: 你的MySQL密码
 ```
 
-### 3. 启动后端
+### 2. 首次启动（自动初始化数据库）
+
+配置好数据库连接后，使用 `dev` profile 启动，Spring Boot 自动执行 SQL 脚本：
+```bash
+# Linux / macOS / Git Bash
+mvn spring-boot:run -Dspring-boot.run.profiles=dev
+
+# Windows PowerShell（需要用引号包裹 -D 参数）
+mvn spring-boot:run "-Dspring-boot.run.profiles=dev"
+
+# 或使用环境变量方式（所有平台通用）
+export SPRING_PROFILES_ACTIVE=dev   # Linux/macOS/Git Bash
+$env:SPRING_PROFILES_ACTIVE="dev"   # Windows PowerShell
+mvn spring-boot:run
+```
+
+自动完成：建库 → 建表 → 插入基础数据 → 创建默认用户。
+
+| SQL 脚本 | 作用 | 幂等性 |
+| --- | --- | --- |
+| `schema.sql` | 建库 + 建 11 张表 | `CREATE TABLE IF NOT EXISTS`（重复启动不丢数据） |
+| `data.sql` | 插入车型/科目/考场/费用标准 | `INSERT IGNORE`（可重复执行） |
+| `DataInitializer` | 创建 admin/coach/student 默认用户（BCrypt） | 存在则跳过 |
+
+> 生产环境请勿使用 `dev` profile。默认 `sql.init.mode=never`，不会执行 SQL 脚本。
+
+### 3. 日常启动
+
+数据库已就绪后，使用默认 profile：
 
 ```bash
 cd 项目根目录
 mvn spring-boot:run
 ```
 
-看到 `Started DriveSchoolApplication in X seconds` 即启动成功，端口 **8080**。启动时 `DataInitializer` 会自动检查并创建默认用户（admin / coach1~3 / student1~2），不会重复插入已存在的数据。
+看到 `Started DriveSchoolApplication in X seconds` 即启动成功，端口 **8080**。启动时 `DataInitializer` 仍会检查并补建缺失的默认用户。
 
 ### 4. 启动前端
 
@@ -100,6 +116,8 @@ npm run dev
 | 考试报名 | | | ✓ | |
 | 考试审核与成绩录入 | ✓ | | | |
 | 学员审核与教练分配 | ✓ | | | |
+| 批量审核 | ✓ | | | |
+| 审核日志查看 | ✓ | | | |
 | 教练 CRUD | ✓ | | | |
 | 基础信息管理 | ✓ | | | |
 | 发证管理 | ✓ | | | |
@@ -111,8 +129,11 @@ npm run dev
 ### 报名流程
 ```
 注册 → 填写信息+上传附件 → 自动初审(年龄/车型)
-  → 管理员体检审核 → 管理员报名审核
-  → 通过 → 自动生成 PDF(报名表/体检表/准考证) → 待分配教练
+  ├─ 不通过 → REJECTED（写明原因，流程结束）
+  └─ 通过 → 保持 PENDING（等待管理员）
+       ├─ 管理员标记体检合格 + 审核通过 → APPROVED
+       │    → 创建学习阶段 → 生成 PDF(报名表/体检表/准考证) → 待分配教练
+       └─ 管理员驳回 → REJECTED → 填写驳回原因
 ```
 
 ### 教练分配
@@ -154,12 +175,13 @@ npm run dev
 │   │   ├── CoachController.java             # 教练端 (录学时/确认约课)
 │   │   ├── AdminController.java             # 管理员端 (全量 CRUD + 统计)
 │   │   └── FileController.java              # 文件上传/下载/预览
-│   ├── security/                            # JwtTokenProvider + JwtAuthenticationFilter
+│   ├── security/                            # JwtTokenProvider + JwtAuthenticationFilter + SecurityUtils
 │   └── util/                                # Result / GlobalExceptionHandler / PdfGenerator
 ├── src/main/resources/
-│   ├── application.yml
-│   ├── schema.sql                           # 建表 (9 张核心表)
-│   └── data.sql                             # 基础数据 (车型/科目/考场/费用)
+│   ├── application.yml                      # 默认配置 (sql.init.mode=never)
+│   ├── application-dev.yml                  # 开发环境 (sql.init.mode=always + continue-on-error)
+│   ├── schema.sql                           # 建表 11 张 (CREATE TABLE IF NOT EXISTS，幂等)
+│   └── data.sql                             # 基础数据 (INSERT IGNORE，幂等)
 └── frontend/
     ├── package.json                         # Vue 3.4 / Vite 5 / Element Plus 2.5 / ECharts 5.5
     ├── vite.config.js                       # 端口 3000, 代理 8080
@@ -196,14 +218,15 @@ npm run dev
 | GET | `/api/common/vehicle-types` | 车型列表（仅启用的） |
 | GET | `/api/common/subjects` | 科目列表 |
 | GET | `/api/common/exam-locations` | 考场列表 |
-| GET | `/api/common/coaches/students?userId=` | 教练查看名下学员 |
+| GET | `/api/common/coaches/students` | 教练自动查看名下学员（JWT 识别身份） |
 
 ### 管理员接口 (`ROLE_ADMIN`)
 
 | 资源 | 方法 | 说明 |
 | --- | --- | --- |
-| `/api/admin/students` | GET | 学员列表（含姓名、电话） |
-| | PUT `/{id}/audit` | 审核（含体检状态） |
+| `/api/admin/students` | GET | 学员列表（含姓名、电话、审核人、审核时间） |
+| | PUT `/{id}/audit` | 审核（含体检状态，自动记录操作人+时间） |
+| | PUT `/batch-audit` | 批量审核（一次审核多个学员） |
 | | GET `/{id}/recommend-coaches` | 推荐教练 |
 | | PUT `/{id}/assign-coach` | 分配教练 |
 | `/api/admin/coaches` | CRUD | 教练管理 |
@@ -221,7 +244,9 @@ npm run dev
 ### 学员 / 教练接口
 
 - `/api/student/**` — 需 `ROLE_STUDENT`：个人信息、报名提交、文件上传、学时查询、约课/取消、考试报名/查询、PDF 下载
+  - 所有接口从 JWT Token 中获取 userId，**不接受客户端传入 userId 参数**，防止越权访问
 - `/api/coach/**` — 需 `ROLE_COACH`：个人信息、录入学时、约课确认/查询
+  - 同样从 JWT 获取身份，学时录入和学员查询时会校验学员是否属于当前教练
 
 ## 配置说明
 
@@ -233,9 +258,59 @@ npm run dev
 | `jwt.expiration` | 86400000（24h） | Token 过期，毫秒 |
 | `spring.servlet.multipart.max-file-size` | 10MB | 单文件上传上限 |
 | `file.upload.allowed-extensions` | jpg,jpeg,png,pdf | 允许上传的文件类型 |
-| `spring.sql.init.mode` | never | 禁止自动执行 SQL，防止清库 |
+| `spring.sql.init.mode` | `never`（默认） | 生产环境不执行 SQL 脚本 |
+| | `always`（dev profile） | 开发环境自动执行 schema.sql + data.sql |
+
+### Profile 说明
+
+| Profile | sql.init.mode | 适用场景 |
+| --- | --- | --- |
+| 默认（无 profile） | `never` | 生产环境 / 日常运行 |
+| `dev` | `always` + `continue-on-error: true` | 首次部署 / 重置数据库 |
+
+```bash
+# 开发环境（自动建库建表）
+mvn spring-boot:run -Dspring-boot.run.profiles=dev
+
+# 生产环境（不执行 SQL）
+mvn spring-boot:run
+```
 
 ## 更新日志
+
+### v1.1.0 (2026-06-12)
+
+**安全修复（权限控制缺陷）**
+
+| 编号 | 问题 | 影响 | 修复 |
+| --- | --- | --- | --- |
+| S01 | IDOR 越权：StudentController 所有接口从客户端接受 userId/studentId 参数 | 学员可查看/操作他人数据（个人信息、学时、约课、考试、PDF） | 所有接口改为从 JWT Token 中获取 userId，不再接受客户端传入 |
+| S02 | IDOR 越权：CoachController 接口从客户端接受 userId 参数 | 教练可查看/操作其他教练的数据 | 统一从 JWT 获取身份，学时记录/查询增加学员归属校验 |
+| S03 | 越权：`/api/common/coaches/students` 任意已登录用户可查询任意教练的学员 | 学员可查看教练名下所有学员信息 | 改为无参调用，JWT 自动识别教练身份，非教练返回空 |
+| S04 | 前端路由仅检查 token 不检查角色 | 学生可手动输入 `/admin` 看到管理员界面和菜单 | 路由 `beforeEach` 新增角色校验，layout 组件 `onMounted` 二次校验 |
+
+**Bug 修复 — 自动审核逻辑**
+
+| 编号 | 问题 | 影响 | 修复 |
+| --- | --- | --- | --- |
+| B16 | `autoAudit()` 检查 `medicalStatus != PASSED` 永远不通过 | 所有报名自动被标为 REJECTED，流程完全阻塞 | 移除体检检查；通过后保持 PENDING（不再自动 APPROVE）；PDF 和学习阶段移到管理员手动通过时创建 |
+
+**新增功能**
+
+| 编号 | 功能 | 说明 |
+| --- | --- | --- |
+| F01 | 批量审核 | `PUT /api/admin/students/batch-audit`，勾选多个学员一次审核 |
+| F02 | 审核日志 | 新增 `audited_by` + `audited_time` 字段，记录审核人和时间 |
+| F03 | 前端审核增强 | 两步审核对话框（体检确认 → 审核决定），体检未合格时"通过"按钮置灰；体检/审核状态筛选；批量审核按钮 |
+| F04 | 开发环境 profile | `application-dev.yml`：首次部署 `mvn spring-boot:run -Dspring-boot.run.profiles=dev` 自动建库建表 |
+
+**架构改进 — 数据库初始化**
+
+| 编号 | 改进 | 说明 |
+| --- | --- | --- |
+| I01 | schema.sql 幂等化 | `DROP TABLE IF EXISTS` 改为 `CREATE TABLE IF NOT EXISTS`，重复启动不丢数据 |
+| I02 | 初始化分工明确 | `schema.sql`（DDL）、`data.sql`（静态基础数据）、`DataInitializer`（BCrypt 用户）职责分离 |
+| I03 | Profile 策略 | 默认 `never`（生产安全），dev profile `always`（开发便利） |
 
 ### v1.0.0 (2026-06-04)
 
@@ -278,7 +353,7 @@ npm run dev
 
 ## 注意事项
 
-1. **数据库初始化**：首次启动前执行 `schema.sql` + `data.sql`。后续重启无需再次执行（`sql.init.mode` 已设为 `never`），`DataInitializer` 只插入不覆盖
+1. **数据库初始化**：首次部署使用 `dev` profile 自动建库建表（`mvn spring-boot:run -Dspring-boot.run.profiles=dev`）。后续启动使用默认 profile（`sql.init.mode=never`，不执行 SQL 脚本）。`schema.sql` 已改为 `CREATE TABLE IF NOT EXISTS`（幂等），`data.sql` 使用 `INSERT IGNORE`，`DataInitializer` 存在则跳过——三重保障重复启动安全
 2. **MySQL 8.0 连接**：`application.yml` 中 JDBC URL 已包含 `allowPublicKeyRetrieval=true`，修改密码时请勿删除此参数
 3. **PDF 中文**：若 PDF 中文显示为方块，在 `src/main/resources/fonts/` 下放入中文字体（如 `simsun.ttc`）
 4. **文件上传**：限制 10MB，仅支持 `jpg/png/pdf`。上传目录 `uploads/` 和 PDF 输出目录 `pdfs/` 启动时自动创建

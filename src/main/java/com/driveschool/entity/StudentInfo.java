@@ -23,6 +23,10 @@ public class StudentInfo {
     private Long coachId;
     private String assignStatus;
     private String certStatus;
+    /** 审核人用户名 */
+    private String auditedBy;
+    /** 审核时间 */
+    private LocalDateTime auditedTime;
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime registrationTime;
 }

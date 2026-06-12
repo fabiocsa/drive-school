@@ -37,7 +37,7 @@ const statusMap = { PENDING: '待审核', APPROVED: '已通过', REJECTED: '未�
 
 onMounted(async () => {
   try {
-    const res = await studentApi().getMyInfo(userStore.userId)
+    const res = await studentApi().getMyInfo()
     info.value = res.data
   } catch (e) {}
 })

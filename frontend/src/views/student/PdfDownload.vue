@@ -30,7 +30,7 @@ const pdfList = [
 
 onMounted(async () => {
   try {
-    const infoRes = await studentApi().getMyInfo(userStore.userId)
+    const infoRes = await studentApi().getMyInfo()
     studentId.value = infoRes.data?.studentInfo?.id
     if (studentId.value) {
       const res = await studentApi().getPdfList(studentId.value)

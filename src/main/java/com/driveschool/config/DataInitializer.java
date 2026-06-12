@@ -9,6 +9,16 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
+/**
+ * 数据库初始化器 —— 仅负责动态用户数据。
+ *
+ * 分工：
+ *   schema.sql   → DDL 建表（CREATE TABLE IF NOT EXISTS，幂等）
+ *   data.sql     → 静态基础数据：车型、科目、考场、费用标准（INSERT IGNORE，幂等）
+ *   本类         → 动态用户数据：admin/coach/student，使用 BCrypt 编码密码
+ *
+ * 所有 initUserIfAbsent 调用均有存在性检查，重复启动安全。
+ */
 @Component
 public class DataInitializer implements CommandLineRunner {
 

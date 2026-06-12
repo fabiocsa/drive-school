@@ -49,7 +49,7 @@ const phaseMap = { PHASE1: '科目一学习', PHASE2: '科目二训练', PHASE3:
 
 onMounted(async () => {
   try {
-    const res = await studentApi().getMyInfo(userStore.userId)
+    const res = await studentApi().getMyInfo()
     info.value = res.data
   } catch (e) {}
 })

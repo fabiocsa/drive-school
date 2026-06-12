@@ -40,18 +40,9 @@ export function authApi() {
   }
 }
 
-export function commonApi() {
-  return {
-    listVehicleTypes: () => api.get('/common/vehicle-types'),
-    listSubjects: () => api.get('/common/subjects'),
-    listExamLocations: () => api.get('/common/exam-locations'),
-    getCoachStudents: (userId) => api.get('/common/coaches/students', { params: { userId } })
-  }
-}
-
 export function studentApi() {
   return {
-    getMyInfo: (userId) => api.get('/student/myinfo', { params: { userId } }),
+    getMyInfo: () => api.get('/student/myinfo'),
     submitRegistration: (data) => api.post('/student/register', data),
     uploadFile: (file) => {
       const formData = new FormData()
@@ -60,12 +51,12 @@ export function studentApi() {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
     },
-    getTrainings: (studentId) => api.get('/student/trainings', { params: { studentId } }),
+    getTrainings: () => api.get('/student/trainings'),
     createAppointment: (data) => api.post('/student/appointment', data),
     cancelAppointment: (id, data) => api.put(`/student/appointment/cancel/${id}`, data),
-    getMyAppointments: (userId) => api.get('/student/appointments', { params: { userId } }),
+    getMyAppointments: () => api.get('/student/appointments'),
     registerExam: (data) => api.post('/student/exam/register', data),
-    getMyExams: (userId) => api.get('/student/exams', { params: { userId } }),
+    getMyExams: () => api.get('/student/exams'),
     getPdfList: (studentId) => api.get(`/student/pdf/${studentId}`),
     downloadPdf: (studentId, pdfType) => api.get(`/student/pdf/download/${studentId}/${pdfType}`, { responseType: 'blob' })
   }
@@ -73,12 +64,21 @@ export function studentApi() {
 
 export function coachApi() {
   return {
-    getMyInfo: (userId) => api.get('/coach/myinfo', { params: { userId } }),
+    getMyInfo: () => api.get('/coach/myinfo'),
     recordTraining: (data) => api.post('/coach/training/record', data),
     getStudentTrainings: (studentId) => api.get('/coach/students/trainings', { params: { studentId } }),
-    getAppointments: (userId) => api.get('/coach/appointments', { params: { userId } }),
-    confirmAppointment: (id, userId) => api.put(`/coach/appointment/confirm/${id}`, null, { params: { userId } }),
+    getAppointments: () => api.get('/coach/appointments'),
+    confirmAppointment: (id) => api.put(`/coach/appointment/confirm/${id}`),
     adjustPhase: (studentId, data) => api.put(`/coach/phase/${studentId}`, data)
+  }
+}
+
+export function commonApi() {
+  return {
+    listVehicleTypes: () => api.get('/common/vehicle-types'),
+    listSubjects: () => api.get('/common/subjects'),
+    listExamLocations: () => api.get('/common/exam-locations'),
+    getCoachStudents: () => api.get('/common/coaches/students')
   }
 }
 
@@ -86,6 +86,7 @@ export function adminApi() {
   return {
     listStudents: () => api.get('/admin/students'),
     auditStudent: (id, data) => api.put(`/admin/students/audit/${id}`, data),
+    batchAudit: (data) => api.put('/admin/students/batch-audit', data),
     recommendCoaches: (id) => api.get(`/admin/students/${id}/recommend-coaches`),
     assignCoach: (id, data) => api.put(`/admin/students/${id}/assign-coach`, data),
 

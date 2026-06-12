@@ -53,7 +53,6 @@ const vehicleTypes = ref([])
 const uploadUrl = '/api/student/upload'
 
 const form = reactive({
-  userId: userStore.userId,
   idCard: '', address: '', vehicleTypeId: null,
   idCardFrontPhoto: '', idCardBackPhoto: '', healthReportPhoto: '', photo: ''
 })
