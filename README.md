@@ -362,3 +362,6 @@ mvn spring-boot:run
 7. **Token 过期**：JWT 默认 24 小时过期，过期后需重新登录。修改 `application.yml` 中 `jwt.expiration` 可调整
 8. **跨域**：CORS 配置为 `allowedOriginPattern("*")`，生产环境请替换为具体域名
 9. **代理转发**：前端开发模式下 Vite 自动代理 `/api` 和 `/uploads` 到 `localhost:8080`，部署时改为 Nginx 反向代理
+
+
+大小姐来也
