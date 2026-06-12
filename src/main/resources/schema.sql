@@ -163,3 +163,7 @@ CREATE TABLE IF NOT EXISTS `exam_registration` (
 -- ============================================
 ALTER TABLE `student_info` ADD COLUMN `audited_by` VARCHAR(50) DEFAULT NULL COMMENT '审核人用户名' AFTER `cert_status`;
 ALTER TABLE `student_info` ADD COLUMN `audited_time` DATETIME DEFAULT NULL COMMENT '审核时间' AFTER `audited_by`;
+
+-- 约课表：复合索引，加速"按教练+日期查询可用时间槽"并辅助防并发冲突
+-- 覆盖 coach_id + appointment_date + status，避免全表扫描
+ALTER TABLE `appointment` ADD INDEX `idx_coach_date_status` (`coach_id`, `appointment_date`, `status`);

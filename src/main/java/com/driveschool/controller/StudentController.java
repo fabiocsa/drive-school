@@ -4,10 +4,13 @@ import com.driveschool.entity.*;
 import com.driveschool.security.SecurityUtils;
 import com.driveschool.service.*;
 import com.driveschool.util.Result;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.servlet.http.HttpServletResponse;
+import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -105,6 +108,57 @@ public class StudentController {
         }
         String reason = data.get("reason");
         return Result.ok(appointmentService.cancelAppointment(id, userId, reason));
+    }
+
+    /**
+     * 查询指定教练在指定日期的可用时间槽（上午/下午分组）
+     * GET /api/student/coach/{coachId}/slots?date=2024-06-17
+     *
+     * 返回结构:
+     * {
+     *   date: "2024-06-17",
+     *   dayOfWeek: "周一",
+     *   morning: { available: true, slots: ["08:00-10:00", "10:00-12:00"] },
+     *   afternoon: { available: false, slots: [] }
+     * }
+     */
+    @GetMapping("/coach/{coachId}/slots")
+    public Result<?> getCoachAvailableSlots(
+            @PathVariable Long coachId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        if (date == null) {
+            return Result.fail("请指定查询日期");
+        }
+        // 不允许查询过去的日期（仅展示未来）
+        if (date.isBefore(LocalDate.now())) {
+            return Result.fail("只能查询今天及以后的日期");
+        }
+        return Result.ok(appointmentService.getCoachAvailableSlots(coachId, date));
+    }
+
+    /**
+     * 查询指定教练在日期范围内有可用槽位的日期列表（用于日期选择器高亮可用日期）
+     * GET /api/student/coach/{coachId}/available-dates?start=2024-06-12&end=2024-07-12
+     *
+     * 返回: ["2024-06-17", "2024-06-18", "2024-06-20", ...]
+     */
+    @GetMapping("/coach/{coachId}/available-dates")
+    public Result<?> getAvailableDates(
+            @PathVariable Long coachId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate start,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate end) {
+        if (start == null || end == null) {
+            return Result.fail("请指定日期范围");
+        }
+        if (start.isAfter(end)) {
+            return Result.fail("开始日期不能晚于结束日期");
+        }
+        // 限制最多查询 90 天的范围，防止全表扫描
+        if (start.plusDays(90).isBefore(end)) {
+            return Result.fail("查询范围不能超过90天");
+        }
+        List<String> dates = appointmentService.getAvailableDates(coachId, start, end);
+        return Result.ok(dates);
     }
 
     /**

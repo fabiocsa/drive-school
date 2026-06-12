@@ -58,7 +58,11 @@ export function studentApi() {
     registerExam: (data) => api.post('/student/exam/register', data),
     getMyExams: () => api.get('/student/exams'),
     getPdfList: (studentId) => api.get(`/student/pdf/${studentId}`),
-    downloadPdf: (studentId, pdfType) => api.get(`/student/pdf/download/${studentId}/${pdfType}`, { responseType: 'blob' })
+    downloadPdf: (studentId, pdfType) => api.get(`/student/pdf/download/${studentId}/${pdfType}`, { responseType: 'blob' }),
+    /** 查询教练在指定日期的可用时间槽（上午/下午分组） */
+    getCoachSlots: (coachId, date) => api.get(`/student/coach/${coachId}/slots`, { params: { date } }),
+    /** 查询教练在日期范围内有可用槽位的日期列表 */
+    getCoachAvailableDates: (coachId, start, end) => api.get(`/student/coach/${coachId}/available-dates`, { params: { start, end } })
   }
 }
 
