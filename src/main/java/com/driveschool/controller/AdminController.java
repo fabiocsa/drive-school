@@ -137,6 +137,34 @@ public class AdminController {
         return Result.ok();
     }
 
+    /**
+     * 重新分配教练——允许修改已绑定教练的学员的教练
+     */
+    @PutMapping("/students/{id}/reassign-coach")
+    public Result<?> reassignCoach(@PathVariable Long id, @RequestBody Map<String, Long> data) {
+        Long newCoachId = data.get("coachId");
+        if (newCoachId == null) return Result.fail("请指定新教练");
+        studentInfoService.assignCoach(id, newCoachId);
+        return Result.ok();
+    }
+
+    /**
+     * 管理员下载学员 PDF 文档
+     * GET /api/admin/students/{studentId}/pdf?type=registration
+     */
+    @GetMapping("/students/{studentId}/pdf")
+    public void downloadStudentPdf(@PathVariable Long studentId,
+                                    @RequestParam String type,
+                                    @RequestParam(required = false, defaultValue = "document") String filename,
+                                    javax.servlet.http.HttpServletResponse response) throws Exception {
+        byte[] pdfBytes = studentInfoService.downloadPdf(studentId, type);
+        String encoded = java.net.URLEncoder.encode(filename, "UTF-8").replaceAll("\\+", "%20");
+        response.setContentType("application/pdf");
+        response.setCharacterEncoding("UTF-8");
+        response.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + encoded);
+        response.getOutputStream().write(pdfBytes);
+    }
+
     @GetMapping("/coaches")
     public Result<?> listCoaches() {
         return Result.ok(coachService.listWithDetails());
@@ -352,11 +380,72 @@ public class AdminController {
     }
 
     @GetMapping("/statistics")
-    public Result<?> allStats(@RequestParam int year) {
+    public Result<?> allStats(@RequestParam int year,
+                               @RequestParam(required = false) Integer month) {
         Map<String, Object> result = new java.util.HashMap<>();
-        result.put("registration", statisticsService.getRegistrationStats(year, null));
+        result.put("registration", statisticsService.getRegistrationStats(year, month));
         result.put("passRate", statisticsService.getPassRateStats());
         result.put("coachWorkload", statisticsService.getCoachWorkloadStats());
         return Result.ok(result);
+    }
+
+    /**
+     * 导出统计数据为 CSV
+     * GET /api/admin/statistics/export?year=2024&month=6
+     */
+    @GetMapping("/statistics/export")
+    public void exportStats(@RequestParam int year,
+                             @RequestParam(required = false) Integer month,
+                             javax.servlet.http.HttpServletResponse response) throws Exception {
+        StringBuilder csv = new StringBuilder();
+        csv.append("﻿"); // BOM for Excel UTF-8
+
+        // 报名统计
+        Map<String, Object> reg = statisticsService.getRegistrationStats(year, month);
+        csv.append("=== 报名人数统计 ===\n");
+        csv.append("时段,人数\n");
+        @SuppressWarnings("unchecked")
+        java.util.List<String> regLabels = (java.util.List<String>) reg.get("labels");
+        @SuppressWarnings("unchecked")
+        java.util.List<Long> regData = (java.util.List<Long>) reg.get("data");
+        for (int i = 0; i < regLabels.size(); i++) {
+            csv.append(regLabels.get(i)).append(",").append(regData.get(i)).append("\n");
+        }
+
+        // 通过率
+        Map<String, Object> pass = statisticsService.getPassRateStats();
+        csv.append("\n=== 各科目通过率 ===\n");
+        csv.append("科目,通过率(%)\n");
+        @SuppressWarnings("unchecked")
+        java.util.List<String> passLabels = (java.util.List<String>) pass.get("labels");
+        @SuppressWarnings("unchecked")
+        java.util.List<Double> passData = (java.util.List<Double>) pass.get("data");
+        for (int i = 0; i < passLabels.size(); i++) {
+            csv.append(passLabels.get(i)).append(",")
+                    .append(String.format("%.1f", passData.get(i))).append("\n");
+        }
+
+        // 教练工作量
+        Map<String, Object> coach = statisticsService.getCoachWorkloadStats();
+        csv.append("\n=== 教练工作量 ===\n");
+        csv.append("教练,学员数,总学时\n");
+        @SuppressWarnings("unchecked")
+        java.util.List<String> coachLabels = (java.util.List<String>) coach.get("labels");
+        @SuppressWarnings("unchecked")
+        java.util.List<Long> studentCounts = (java.util.List<Long>) coach.get("studentCounts");
+        @SuppressWarnings("unchecked")
+        java.util.List<java.math.BigDecimal> totalHours = (java.util.List<java.math.BigDecimal>) coach.get("totalHours");
+        for (int i = 0; i < coachLabels.size(); i++) {
+            csv.append(coachLabels.get(i)).append(",")
+                    .append(studentCounts.get(i)).append(",")
+                    .append(totalHours.get(i)).append("\n");
+        }
+
+        String filename = "statistics_" + year + (month != null ? "_" + month : "") + ".csv";
+        String encoded = java.net.URLEncoder.encode(filename, "UTF-8").replaceAll("\\+", "%20");
+        response.setContentType("text/csv; charset=UTF-8");
+        response.setCharacterEncoding("UTF-8");
+        response.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + encoded);
+        response.getOutputStream().write(csv.toString().getBytes("UTF-8"));
     }
 }

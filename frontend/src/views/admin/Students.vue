@@ -63,12 +63,14 @@
       <el-table-column label="备注" min-width="120">
         <template #default="{row}">{{ row.auditRemark || '' }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="280" fixed="right">
+      <el-table-column label="操作" width="320" fixed="right">
         <template #default="{row}">
           <el-button v-if="row.auditStatus === 'PENDING' || row.auditStatus === 'REJECTED'"
                      type="primary" size="small" @click="auditDialog(row)">审核</el-button>
           <el-button v-if="row.auditStatus === 'APPROVED' && row.assignStatus === 'PENDING'"
                      type="success" size="small" @click="assignDialog(row)">分配教练</el-button>
+          <el-button v-if="row.auditStatus === 'APPROVED' && row.assignStatus === 'ASSIGNED'"
+                     type="warning" size="small" @click="assignDialog(row)">重新分配</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -155,21 +157,37 @@
     </el-dialog>
 
     <!-- ========== 分配教练对话框 ========== -->
-    <el-dialog v-model="showAssign" title="分配教练" width="500px">
-      <h4>推荐教练（按评分排序）</h4>
-      <el-table :data="recommendedCoaches" border @row-click="selectCoach">
-        <el-table-column prop="name" label="姓名" />
-        <el-table-column prop="phone" label="电话" />
-        <el-table-column prop="coach.rating" label="评分" />
-        <el-table-column label="操作">
+    <el-dialog v-model="showAssign" :title="isReassign ? '重新分配教练' : '分配教练'" width="600px">
+      <h4>推荐教练（按综合匹配度排序，含工作量参考）</h4>
+      <el-table :data="recommendedCoaches" border @row-click="selectCoach" highlight-current-row>
+        <el-table-column prop="name" label="姓名" width="100" />
+        <el-table-column label="评分" width="80">
           <template #default="{row}">
-            <el-radio v-model="selectedCoachId" :value="row.coach.id">选择</el-radio>
+            <el-rate :model-value="row.coach?.rating || 0" disabled size="small" />
+          </template>
+        </el-table-column>
+        <el-table-column prop="studentCount" label="在带学员" width="90" />
+        <el-table-column label="总学时" width="90">
+          <template #default="{row}">{{ Number(row.totalHours || 0).toFixed(0) }}h</template>
+        </el-table-column>
+        <el-table-column label="综合分" width="80">
+          <template #default="{row}">
+            <el-tag :type="row.compositeScore >= 80 ? 'success' : row.compositeScore >= 60 ? 'warning' : 'info'" size="small">
+              {{ row.compositeScore }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="选择" width="70">
+          <template #default="{row}">
+            <el-radio v-model="selectedCoachId" :value="row.coach.id" />
           </template>
         </el-table-column>
       </el-table>
       <template #footer>
         <el-button @click="showAssign = false">取消</el-button>
-        <el-button type="primary" @click="submitAssign" :disabled="!selectedCoachId">确认分配</el-button>
+        <el-button type="primary" @click="submitAssign" :disabled="!selectedCoachId">
+          {{ isReassign ? '确认重新分配' : '确认分配' }}
+        </el-button>
       </template>
     </el-dialog>
   </div>
@@ -184,6 +202,7 @@ const students = ref([])
 const showAudit = ref(false)
 const showBatchAudit = ref(false)
 const showAssign = ref(false)
+const isReassign = ref(false)           // true=重新分配, false=首次分配
 const currentStudent = ref(null)
 const recommendedCoaches = ref([])
 const selectedCoachId = ref(null)
@@ -293,6 +312,7 @@ async function submitBatchAudit() {
 async function assignDialog(row) {
   currentStudent.value = row
   selectedCoachId.value = null
+  isReassign.value = row.assignStatus === 'ASSIGNED'
   try {
     const res = await adminApi().recommendCoaches(row.id)
     recommendedCoaches.value = res.data || []
@@ -305,8 +325,11 @@ function selectCoach(row) {
 }
 
 async function submitAssign() {
-  await adminApi().assignCoach(currentStudent.value.id, { coachId: selectedCoachId.value })
-  ElMessage.success('分配成功')
+  const apiCall = isReassign.value
+    ? adminApi().reassignCoach(currentStudent.value.id, { coachId: selectedCoachId.value })
+    : adminApi().assignCoach(currentStudent.value.id, { coachId: selectedCoachId.value })
+  await apiCall
+  ElMessage.success(isReassign.value ? '重新分配成功' : '分配成功')
   showAssign.value = false
   await loadStudents()
 }

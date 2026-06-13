@@ -12,7 +12,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -28,15 +27,24 @@ public class StudentInfoServiceImpl extends ServiceImpl<StudentInfoMapper, Stude
     private final PdfGenerator pdfGenerator;
     private final LearningPhaseMapper learningPhaseMapper;
     private final CoachMapper coachMapper;
+    private final ExamRegistrationMapper examRegistrationMapper;
+    private final SubjectMapper subjectMapper;
+    private final ExamLocationMapper examLocationMapper;
 
     public StudentInfoServiceImpl(UserMapper userMapper, VehicleTypeMapper vehicleTypeMapper,
                                    PdfGenerator pdfGenerator, LearningPhaseMapper learningPhaseMapper,
-                                   CoachMapper coachMapper) {
+                                   CoachMapper coachMapper,
+                                   ExamRegistrationMapper examRegistrationMapper,
+                                   SubjectMapper subjectMapper,
+                                   ExamLocationMapper examLocationMapper) {
         this.userMapper = userMapper;
         this.vehicleTypeMapper = vehicleTypeMapper;
         this.pdfGenerator = pdfGenerator;
         this.learningPhaseMapper = learningPhaseMapper;
         this.coachMapper = coachMapper;
+        this.examRegistrationMapper = examRegistrationMapper;
+        this.subjectMapper = subjectMapper;
+        this.examLocationMapper = examLocationMapper;
     }
 
     @Override
@@ -48,9 +56,21 @@ public class StudentInfoServiceImpl extends ServiceImpl<StudentInfoMapper, Stude
             throw new RuntimeException("您已提交过报名信息");
         }
 
+        String idCard = (String) data.get("idCard");
+        // 身份证格式校验（18位，最后一位可为X）
+        if (idCard == null || !idCard.matches("^[1-9]\\d{5}(19|20)\\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\\d|3[01])\\d{3}[0-9Xx]$")) {
+            throw new RuntimeException("身份证号格式不正确");
+        }
+
+        // 同一身份证号不得重复报名（防止一人多报）
+        long dupCount = count(new LambdaQueryWrapper<StudentInfo>().eq(StudentInfo::getIdCard, idCard));
+        if (dupCount > 0) {
+            throw new RuntimeException("该身份证号已提交过报名信息，请勿重复报名");
+        }
+
         StudentInfo info = new StudentInfo();
         info.setUserId(userId);
-        info.setIdCard((String) data.get("idCard"));
+        info.setIdCard(idCard);
         info.setAddress((String) data.get("address"));
         info.setVehicleTypeId(Long.valueOf(data.get("vehicleTypeId").toString()));
         info.setIdCardFrontPhoto((String) data.get("idCardFrontPhoto"));
@@ -152,16 +172,8 @@ public class StudentInfoServiceImpl extends ServiceImpl<StudentInfoMapper, Stude
             info.setAuditedTime(java.time.LocalDateTime.now());
             updateById(info);
 
-            // 审核通过后创建学习阶段并生成 PDF
+            // 审核通过后创建学习阶段（PDF 改为学员下载时实时生成，不再预生成到磁盘）
             createLearningPhase(info.getId());
-            try {
-                User user = userMapper.selectById(info.getUserId());
-                pdfGenerator.generateRegistrationForm(info, user);
-                pdfGenerator.generateHealthReport(info, user);
-                pdfGenerator.generateExamCard(info, user);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
         } else if ("REJECTED".equals(status)) {
             info.setAuditStatus("REJECTED");
             info.setAuditRemark(remark != null && !remark.isEmpty() ? remark : "管理员审核不通过");
@@ -233,30 +245,52 @@ public class StudentInfoServiceImpl extends ServiceImpl<StudentInfoMapper, Stude
 
     @Override
     public byte[] downloadPdf(Long studentId, String pdfType) {
-        String pdfDir = CorsConfig.PDF_OUTPUT_PATH;
-        String fileName;
-        switch (pdfType) {
-            case "registration":
-                fileName = "registration_" + studentId + ".pdf";
-                break;
-            case "health":
-                fileName = "health_" + studentId + ".pdf";
-                break;
-            case "examcard":
-                fileName = "examcard_" + studentId + ".pdf";
-                break;
-            default:
-                throw new RuntimeException("未知PDF类型");
-        }
+        StudentInfo info = getById(studentId);
+        if (info == null) throw new RuntimeException("学员信息不存在");
+
+        User user = userMapper.selectById(info.getUserId());
+        if (user == null) throw new RuntimeException("用户信息不存在");
+
         try {
-            File file = new File(pdfDir + fileName);
-            byte[] bytes = new byte[(int) file.length()];
-            try (FileInputStream fis = new FileInputStream(file)) {
-                fis.read(bytes);
+            switch (pdfType) {
+                case "registration": {
+                    // 报名表：需学员信息 + 用户 + 车型 + 教练
+                    VehicleType vt = info.getVehicleTypeId() != null
+                            ? vehicleTypeMapper.selectById(info.getVehicleTypeId()) : null;
+                    Coach coach = info.getCoachId() != null
+                            ? coachMapper.selectById(info.getCoachId()) : null;
+                    User coachUser = coach != null ? userMapper.selectById(coach.getUserId()) : null;
+                    return pdfGenerator.generateRegistrationForm(info, user, vt, coach, coachUser);
+                }
+                case "health": {
+                    // 体检表：需学员信息 + 用户，体检状态必须已判定
+                    if ("PENDING".equals(info.getMedicalStatus())) {
+                        throw new RuntimeException("体检状态尚未判定，无法生成体检表");
+                    }
+                    return pdfGenerator.generateHealthReport(info, user);
+                }
+                case "examcard": {
+                    // 准考证：需最近一次排考记录
+                    ExamRegistration examReg = examRegistrationMapper.selectOne(
+                            new LambdaQueryWrapper<ExamRegistration>()
+                                    .eq(ExamRegistration::getStudentId, studentId)
+                                    .eq(ExamRegistration::getStatus, "APPROVED")
+                                    .orderByDesc(ExamRegistration::getExamDate)
+                                    .last("LIMIT 1"));
+                    if (examReg == null) {
+                        throw new RuntimeException("暂无已排考的考试记录，无法生成准考证");
+                    }
+                    Subject subject = subjectMapper.selectById(examReg.getSubjectId());
+                    ExamLocation location = examLocationMapper.selectById(examReg.getExamLocationId());
+                    return pdfGenerator.generateExamCard(info, user, examReg, subject, location);
+                }
+                default:
+                    throw new RuntimeException("未知PDF类型: " + pdfType);
             }
-            return bytes;
-        } catch (IOException e) {
-            throw new RuntimeException("PDF文件读取失败");
+        } catch (RuntimeException e) {
+            throw e; // 业务异常直接抛出
+        } catch (Exception e) {
+            throw new RuntimeException("PDF生成失败: " + e.getMessage());
         }
     }
 

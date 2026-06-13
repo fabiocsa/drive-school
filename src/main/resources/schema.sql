@@ -170,3 +170,6 @@ ALTER TABLE `appointment` ADD INDEX `idx_coach_date_status` (`coach_id`, `appoin
 
 -- 扩展 schedule_json 列以容纳含容量的新格式 (VARCHAR 500 → 1000)
 ALTER TABLE `coach` MODIFY COLUMN `schedule_json` VARCHAR(1000) DEFAULT NULL COMMENT '档期JSON(含容量)';
+
+-- 身份证号唯一索引（防止重复报名）+ 加速查询
+ALTER TABLE `student_info` ADD UNIQUE INDEX `uk_id_card` (`id_card`);

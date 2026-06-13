@@ -10,8 +10,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import javax.servlet.http.HttpServletResponse;
 import java.time.LocalDate;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @RestController
 @RequestMapping("/api/student")
@@ -198,7 +197,16 @@ public class StudentController {
     }
 
     /**
-     * 获取 PDF 下载列表（验证 studentId 属于当前登录学员）
+     * 获取 PDF 可生成性检查结果（验证 studentId 属于当前登录学员）
+     * 返回每份文档的: available（可否生成）、missingFields（缺失项）、reason（不可用原因）
+     *
+     * GET /api/student/pdf/{studentId}
+     * 响应:
+     * {
+     *   "registration": { "available": true,  "label": "报名表",   "missingFields": [] },
+     *   "health":       { "available": false, "label": "体检表",   "missingFields": ["体检状态尚未判定"] },
+     *   "examcard":     { "available": false, "label": "准考证",   "missingFields": ["暂无已排考的考试记录"] }
+     * }
      */
     @GetMapping("/pdf/{studentId}")
     public Result<?> getPdfList(@PathVariable Long studentId) {
@@ -209,17 +217,21 @@ public class StudentController {
         if (!studentInfoService.isStudentOwnedByUser(studentId, userId)) {
             return Result.fail("无权访问该学员的PDF");
         }
-        boolean reg = studentInfoService.downloadPdf(studentId, "registration") != null;
-        boolean health = studentInfoService.downloadPdf(studentId, "health") != null;
-        boolean examcard = studentInfoService.downloadPdf(studentId, "examcard") != null;
+
+        Map<String, Object> reg = checkPdfAvailability(studentId, "registration", "报名表");
+        Map<String, Object> health = checkPdfAvailability(studentId, "health", "体检表");
+        Map<String, Object> examcard = checkPdfAvailability(studentId, "examcard", "准考证");
+
         return Result.ok(Map.of("registration", reg, "health", health, "examcard", examcard));
     }
 
     /**
-     * 下载 PDF（验证 studentId 属于当前登录学员）
+     * 下载 PDF（实时生成字节流，文件名前端指定）
+     * GET /api/student/pdf/download/{studentId}/{pdfType}?filename=张三_报名表.pdf
      */
     @GetMapping("/pdf/download/{studentId}/{pdfType}")
     public void downloadPdf(@PathVariable Long studentId, @PathVariable String pdfType,
+                             @RequestParam(required = false, defaultValue = "document") String filename,
                              HttpServletResponse response) throws Exception {
         Long userId = SecurityUtils.getCurrentUserId();
         if (userId == null) {
@@ -231,8 +243,30 @@ public class StudentController {
             return;
         }
         byte[] pdfBytes = studentInfoService.downloadPdf(studentId, pdfType);
+
+        // RFC 5987 编码，支持中文文件名
+        String encoded = java.net.URLEncoder.encode(filename, "UTF-8").replaceAll("\\+", "%20");
         response.setContentType("application/pdf");
-        response.setHeader("Content-Disposition", "attachment; filename=" + pdfType + ".pdf");
+        response.setCharacterEncoding("UTF-8");
+        response.setHeader("Content-Disposition",
+                "attachment; filename*=UTF-8''" + encoded);
         response.getOutputStream().write(pdfBytes);
+    }
+
+    /** 检查单类 PDF 是否可生成，返回可用状态和缺失原因 */
+    private Map<String, Object> checkPdfAvailability(Long studentId, String pdfType, String label) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("label", label);
+        List<String> missing = new ArrayList<>();
+        try {
+            studentInfoService.downloadPdf(studentId, pdfType);
+            result.put("available", true);
+            result.put("missingFields", missing);
+        } catch (RuntimeException e) {
+            result.put("available", false);
+            missing.add(e.getMessage());
+            result.put("missingFields", missing);
+        }
+        return result;
     }
 }

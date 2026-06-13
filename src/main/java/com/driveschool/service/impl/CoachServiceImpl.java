@@ -48,15 +48,31 @@ public class CoachServiceImpl extends ServiceImpl<CoachMapper, Coach> implements
         List<Map<String, Object>> result = new ArrayList<>();
         int count = 0;
         for (Coach coach : coaches) {
-            if (count >= 3) break;
+            if (count >= 5) break; // 扩展为最多推荐 5 名教练
             Map<String, Object> map = new HashMap<>();
             User user = userMapper.selectById(coach.getUserId());
             map.put("coach", coach);
             map.put("name", user != null ? user.getRealName() : "");
             map.put("phone", user != null ? user.getPhone() : "");
+
+            // 工作量数据：当前带教学员数 + 总授课学时
+            Long studentCount = studentInfoMapper.countByCoachId(coach.getId());
+            java.math.BigDecimal totalHours = trainingHourMapper.sumDurationByCoachId(coach.getId());
+            map.put("studentCount", studentCount != null ? studentCount : 0);
+            map.put("totalHours", totalHours != null ? totalHours : java.math.BigDecimal.ZERO);
+
+            // 综合评分：rating(1-5) → 60%权重 + 空闲指数(按0学员得满分)占40%
+            // 简单公式：score = rating * 12 + Math.max(0, 40 - studentCount * 2)
+            int compositeScore = coach.getRating() != null ? coach.getRating() * 12 : 36;
+            compositeScore += Math.max(0, 40 - (studentCount != null ? studentCount.intValue() : 0) * 2);
+            map.put("compositeScore", compositeScore);
+
             result.add(map);
             count++;
         }
+        // 按复合评分降序排列
+        result.sort((a, b) -> Integer.compare(
+                (Integer) b.get("compositeScore"), (Integer) a.get("compositeScore")));
         return result;
     }
 

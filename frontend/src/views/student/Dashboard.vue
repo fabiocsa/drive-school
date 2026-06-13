@@ -118,11 +118,21 @@ const phaseMap = { PHASE1: '科目一学习', PHASE2: '科目二训练', PHASE3:
 const phases = computed(() => {
   const lp = info.value?.learningPhase
   if (!lp) return []
+  // 从车型配置读取各阶段所需学时（JSON: {"phase1":12,"phase2":16,...}）
+  let hoursJson = {}
+  try {
+    const raw = info.value?.vehicleType?.subjectHoursJson
+    if (raw) hoursJson = typeof raw === 'string' ? JSON.parse(raw) : raw
+  } catch (e) {}
   return [
-    { key: '1', label: '科目一', done: !!lp.phase1Completed, hours: Number(lp.phase1Hours) || 0, required: 12 },
-    { key: '2', label: '科目二', done: !!lp.phase2Completed, hours: Number(lp.phase2Hours) || 0, required: 16 },
-    { key: '3', label: '科目三', done: !!lp.phase3Completed, hours: Number(lp.phase3Hours) || 0, required: 24 },
-    { key: '4', label: '科目四', done: !!lp.phase4Completed, hours: Number(lp.phase4Hours) || 0, required: 10 }
+    { key: '1', label: '科目一', done: !!lp.phase1Completed,
+      hours: Number(lp.phase1Hours) || 0, required: hoursJson.phase1 || 12 },
+    { key: '2', label: '科目二', done: !!lp.phase2Completed,
+      hours: Number(lp.phase2Hours) || 0, required: hoursJson.phase2 || 16 },
+    { key: '3', label: '科目三', done: !!lp.phase3Completed,
+      hours: Number(lp.phase3Hours) || 0, required: hoursJson.phase3 || 24 },
+    { key: '4', label: '科目四', done: !!lp.phase4Completed,
+      hours: Number(lp.phase4Hours) || 0, required: hoursJson.phase4 || 10 }
   ]
 })
 

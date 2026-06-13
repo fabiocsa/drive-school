@@ -12,6 +12,9 @@
           <el-option v-for="m in 12" :key="m" :label="m+'月'" :value="m" />
         </el-select>
       </el-form-item>
+      <el-form-item>
+        <el-button type="success" :icon="Download" @click="exportCSV" :loading="exportLoading">导出 CSV</el-button>
+      </el-form-item>
     </el-form>
 
     <el-row :gutter="20">
@@ -39,10 +42,13 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { adminApi } from '../../api'
+import { ElMessage } from 'element-plus'
+import { Download } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 
 const year = ref(new Date().getFullYear())
 const month = ref(null)
+const exportLoading = ref(false)
 const yearOptions = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i)
 const regChart = ref(null); const passRateChart = ref(null); const coachChart = ref(null)
 let regChartInstance = null; let passRateChartInstance = null; let coachChartInstance = null
@@ -63,7 +69,8 @@ function handleResize() {
 
 async function loadStats() {
   try {
-    const allRes = await adminApi().getAllStats(year.value)
+    // 修复：传入 month（month 为 null 时显示全年按月汇总）
+    const allRes = await adminApi().getAllStats(year.value, month.value)
 
     await nextTick()
     initRegChart(allRes.data?.registration)
@@ -71,6 +78,25 @@ async function loadStats() {
     initCoachChart(allRes.data?.coachWorkload)
     window.addEventListener('resize', handleResize)
   } catch (e) {}
+}
+
+async function exportCSV() {
+  exportLoading.value = true
+  try {
+    const res = await adminApi().exportStats(year.value, month.value)
+    const blob = new Blob([res], { type: 'text/csv;charset=UTF-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `统计报表_${year.value}${month.value ? '_' + month.value + '月' : ''}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+    ElMessage.success('导出成功')
+  } catch (e) {
+    ElMessage.error('导出失败')
+  } finally {
+    exportLoading.value = false
+  }
 }
 
 function initRegChart(data) {

@@ -58,7 +58,10 @@ export function studentApi() {
     registerExam: (data) => api.post('/student/exam/register', data),
     getMyExams: () => api.get('/student/exams'),
     getPdfList: (studentId) => api.get(`/student/pdf/${studentId}`),
-    downloadPdf: (studentId, pdfType) => api.get(`/student/pdf/download/${studentId}/${pdfType}`, { responseType: 'blob' }),
+    downloadPdf: (studentId, pdfType, filename) => api.get(`/student/pdf/download/${studentId}/${pdfType}`, {
+      params: { filename },
+      responseType: 'blob'
+    }),
     /** 查询教练在指定日期的可用时间槽（上午/下午分组） */
     getCoachSlots: (coachId, date) => api.get(`/student/coach/${coachId}/slots`, { params: { date } }),
     /** 查询教练在日期范围内有可用槽位的日期列表 */
@@ -99,6 +102,7 @@ export function adminApi() {
     batchAudit: (data) => api.put('/admin/students/batch-audit', data),
     recommendCoaches: (id) => api.get(`/admin/students/${id}/recommend-coaches`),
     assignCoach: (id, data) => api.put(`/admin/students/${id}/assign-coach`, data),
+    reassignCoach: (id, data) => api.put(`/admin/students/${id}/reassign-coach`, data),
 
     listCoaches: () => api.get('/admin/coaches'),
     addCoach: (data) => api.post('/admin/coaches', data),
@@ -134,7 +138,8 @@ export function adminApi() {
     getRegistrationStats: (year, month) => api.get('/admin/statistics/registration', { params: { year, month } }),
     getPassRateStats: () => api.get('/admin/statistics/pass-rate'),
     getCoachWorkloadStats: () => api.get('/admin/statistics/coach-workload'),
-    getAllStats: (year) => api.get('/admin/statistics', { params: { year } })
+    getAllStats: (year, month) => api.get('/admin/statistics', { params: { year, month } }),
+    exportStats: (year, month) => api.get('/admin/statistics/export', { params: { year, month }, responseType: 'blob' })
   }
 }
 

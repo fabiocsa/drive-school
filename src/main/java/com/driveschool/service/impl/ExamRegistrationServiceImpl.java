@@ -18,13 +18,16 @@ public class ExamRegistrationServiceImpl extends ServiceImpl<ExamRegistrationMap
     private final StudentInfoMapper studentInfoMapper;
     private final LearningPhaseMapper learningPhaseMapper;
     private final UserMapper userMapper;
+    private final ExamLocationMapper examLocationMapper;
 
     public ExamRegistrationServiceImpl(StudentInfoMapper studentInfoMapper,
                                         LearningPhaseMapper learningPhaseMapper,
-                                        UserMapper userMapper) {
+                                        UserMapper userMapper,
+                                        ExamLocationMapper examLocationMapper) {
         this.studentInfoMapper = studentInfoMapper;
         this.learningPhaseMapper = learningPhaseMapper;
         this.userMapper = userMapper;
+        this.examLocationMapper = examLocationMapper;
     }
 
     @Override
@@ -63,11 +66,24 @@ public class ExamRegistrationServiceImpl extends ServiceImpl<ExamRegistrationMap
                 .eq(ExamRegistration::getSubjectId, subjectId));
         if (retryCount >= 5) throw new RuntimeException("该科目补考次数已达上限");
 
+        // 考场容量校验：该考场 + 日期的已批准考试数 < 考场容量
+        Long locId = Long.valueOf(data.get("examLocationId").toString());
+        LocalDate examDate = LocalDate.parse(data.get("examDate").toString());
+        ExamLocation location = examLocationMapper.selectById(locId);
+        if (location == null) throw new RuntimeException("考场不存在");
+        long bookedCount = count(new LambdaQueryWrapper<ExamRegistration>()
+                .eq(ExamRegistration::getExamLocationId, locId)
+                .eq(ExamRegistration::getExamDate, examDate)
+                .eq(ExamRegistration::getStatus, "APPROVED"));
+        if (bookedCount >= location.getCapacity()) {
+            throw new RuntimeException("该考场该日期已约满（容量" + location.getCapacity() + "），请选择其他日期或考场");
+        }
+
         ExamRegistration exam = new ExamRegistration();
         exam.setStudentId(info.getId());
         exam.setSubjectId(subjectId);
-        exam.setExamLocationId(Long.valueOf(data.get("examLocationId").toString()));
-        exam.setExamDate(LocalDate.parse(data.get("examDate").toString()));
+        exam.setExamLocationId(locId);
+        exam.setExamDate(examDate);
         exam.setStatus("PENDING");
         exam.setRetryCount(retryCount);
         save(exam);
