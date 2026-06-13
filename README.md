@@ -113,6 +113,9 @@ npm run dev
 | 约课/取消约课 | | ✓ | ✓ | |
 | 录入学时 | | ✓ | | |
 | 确认约课 | | ✓ | | |
+| 档期管理（含容量设置） | | ✓ | | |
+| 搜索学员 | | ✓ | | |
+| 查询教练可用时间槽 | | ✓ | ✓ | |
 | 考试报名 | | | ✓ | |
 | 考试审核与成绩录入 | ✓ | | | |
 | 学员审核与教练分配 | ✓ | | | |
@@ -121,7 +124,9 @@ npm run dev
 | 教练 CRUD | ✓ | | | |
 | 基础信息管理 | ✓ | | | |
 | 发证管理 | ✓ | | | |
-| 统计分析 | ✓ | | | |
+| 统计分析与 CSV 导出 | ✓ | | | |
+| 下载学员 PDF | ✓ | | | |
+| 教练重新分配 | ✓ | | | |
 | 查询车型/科目/考场(公共) | ✓ | ✓ | ✓ | |
 
 ## 业务流程
@@ -172,7 +177,7 @@ npm run dev
 │   │   ├── AuthController.java              # 登录/注册 (开放)
 │   │   ├── CommonController.java            # 公共数据 (车型/科目/考场/教练学员列表)
 │   │   ├── StudentController.java           # 学员端 (报名/学时/约课/考试/PDF)
-│   │   ├── CoachController.java             # 教练端 (录学时/确认约课)
+│   │   ├── CoachController.java             # 教练端 (录学时/确认约课/档期管理/学员搜索)
 │   │   ├── AdminController.java             # 管理员端 (全量 CRUD + 统计)
 │   │   └── FileController.java              # 文件上传/下载/预览
 │   ├── security/                            # JwtTokenProvider + JwtAuthenticationFilter + SecurityUtils
@@ -229,6 +234,8 @@ npm run dev
 | | PUT `/batch-audit` | 批量审核（一次审核多个学员） |
 | | GET `/{id}/recommend-coaches` | 推荐教练 |
 | | PUT `/{id}/assign-coach` | 分配教练 |
+| | PUT `/{id}/reassign-coach` | 重新分配教练（允许修改已绑定教练） |
+| | GET `/{id}/pdf?type=registration` | 下载学员 PDF 文档 |
 | `/api/admin/coaches` | CRUD | 教练管理 |
 | `/api/admin/vehicle-types` | CRUD | 车型管理 |
 | `/api/admin/subjects` | CRUD | 科目管理 |
@@ -239,14 +246,21 @@ npm run dev
 | | PUT `/{id}/score` | 录入成绩 |
 | `/api/admin/waiting-cert` | GET | 待发证学员 |
 | `/api/admin/issue-cert/{id}` | PUT | 发证 |
-| `/api/admin/statistics` | GET | 全部统计 (报名/通过率/工作量) |
+| `/api/admin/statistics` | GET | 全部统计 (报名/通过率/工作量)，支持 `year` + 可选 `month` |
+| `/api/admin/statistics/export` | GET | 导出统计为 CSV（含 BOM，Excel 直接打开） |
 
 ### 学员 / 教练接口
 
-- `/api/student/**` — 需 `ROLE_STUDENT`：个人信息、报名提交、文件上传、学时查询、约课/取消、考试报名/查询、PDF 下载
+- `/api/student/**` — 需 `ROLE_STUDENT`：个人信息、报名提交、文件上传、学时查询、约课/取消、教练可用时间槽查询、考试报名/查询、PDF 可用性检查与下载
   - 所有接口从 JWT Token 中获取 userId，**不接受客户端传入 userId 参数**，防止越权访问
-- `/api/coach/**` — 需 `ROLE_COACH`：个人信息、录入学时、约课确认/查询
+  - `GET /coach/{coachId}/slots?date=YYYY-MM-DD` — 查询教练在指定日期的可用时间槽（上午/下午分组，含容量）
+  - `GET /coach/{coachId}/available-dates?start=&end=` — 查询教练在日期范围内有可用槽位的日期
+  - `GET /pdf/{studentId}` — 获取 PDF 可生成性检查结果（返回每份文档的可用状态和缺失项）
+- `/api/coach/**` — 需 `ROLE_COACH`：个人信息、录入学时、约课确认/查询、档期管理、学员搜索
   - 同样从 JWT 获取身份，学时录入和学员查询时会校验学员是否属于当前教练
+  - `PUT /schedule` — 更新空闲档期（支持设置每个时段的学员容量）
+  - `GET /students/search?keyword=` — 模糊搜索名下学员
+  - `GET /students/{studentInfoId}/summary` — 获取学员详细信息摘要
 
 ## 配置说明
 
@@ -277,6 +291,50 @@ mvn spring-boot:run
 ```
 
 ## 更新日志
+
+### v1.2.0 (2026-06-13)
+
+**新增功能 — 约课与教练管理增强**
+
+| 编号 | 功能 | 说明 |
+| --- | --- | --- |
+| F05 | 教练时间槽查询 | `GET /api/student/coach/{coachId}/slots` 按日期查询教练可用时段（上午/下午分组，4 个 2h 槽位） |
+| F06 | 可用日期范围查询 | `GET /api/student/coach/{coachId}/available-dates` 在日期范围内查询有可用槽的日期（最多 90 天） |
+| F07 | 约课容量限制 | 教练可为每个档期设置学员容量，约课时自动校验不超容量，防止超约 |
+| F08 | 教练档期管理 | `PUT /api/coach/schedule` 支持教练自主设置空闲档期及每时段容量 |
+| F09 | 教练搜索学员 | `GET /api/coach/students/search?keyword=` 模糊搜索名下学员，方便录入学时 |
+| F10 | 学员详情摘要 | `GET /api/coach/students/{studentInfoId}/summary` 教练查看学员完整学习进度 |
+| F11 | 教练重新分配 | `PUT /api/admin/students/{id}/reassign-coach` 允许管理员为已绑定教练的学员更换教练 |
+| F12 | 统计按月筛选 | `GET /api/admin/statistics` 新增 `month` 可选参数，支持按年+月双层统计 |
+| F13 | 统计 CSV 导出 | `GET /api/admin/statistics/export` 导出统计数据为 CSV 文件（UTF-8 BOM，Excel 友好） |
+| F14 | PDF 可用性检查 | `GET /api/student/pdf/{studentId}` 返回每类 PDF 的可用状态、缺失字段和原因 |
+| F15 | 中文文件名 PDF 下载 | PDF 下载使用 RFC 5987 编码 `filename*=UTF-8''...`，支持中文文件名 |
+| F16 | 管理员下载学员 PDF | `GET /api/admin/students/{studentId}/pdf?type=registration` 管理员端直接下载学员 PDF |
+
+**前端界面重构**
+
+| 编号 | 改进 | 说明 |
+| --- | --- | --- |
+| U01 | 全局设计系统 | CSS 变量/设计令牌体系（颜色、圆角、阴影、过渡），统一视觉风格 |
+| U02 | 全局样式升级 | 现代化字体栈（`-apple-system` + `PingFang SC` + `Microsoft YaHei`），抗锯齿渲染 |
+| U03 | 登录/注册页重设计 | 全屏渐变色背景、毛玻璃卡片、动态品牌标语、表单校验增强 |
+| U04 | 各 Layout 重构 | 侧栏导航高亮、用户信息卡片、折叠动画、移动端适配 |
+| U05 | Dashboard 重设计 | 统计卡片带图标/渐变色/趋势标签、图表区使用 ECharts 5.5 动态渲染 |
+| U06 | 约课界面重构 | 教练卡片 + 日期选择器高亮可用日 + 时间槽可视化（含剩余容量） |
+| U07 | 基础信息管理重构 | Tab 分组（车型/科目/考场/费用标准），弹窗表单统一校验 |
+| U08 | 考试管理重构 | 筛选条件增强、状态标签彩色区分、补考次数可视化 |
+| U09 | 教练管理重构 | 教练卡片 + 列表双模展示、星级评分可视化、档期配置面板 |
+| U10 | 统计页面重构 | 年月双层筛选、卡片+KPI 概览、三组图表 + CSV 导出按钮 |
+| U11 | 发证管理重构 | 进度步骤条、发证确认对话框、筛选条件增强 |
+| U12 | 学员端 PdfDownload 重构 | 分卡片展示三类 PDF 生成条件、缺失项实时提示、下载按钮条件启用 |
+
+**数据库改进**
+
+| 编号 | 改进 | 说明 |
+| --- | --- | --- |
+| D01 | 约课复合索引 | `idx_coach_date_status` 加速按教练+日期查询可用时间槽 |
+| D02 | 教练档期列扩容 | `schedule_json` VARCHAR 500 → 1000，容纳含容量的新格式 |
+| D03 | 身份证唯一索引 | `uk_id_card` 防止重复报名 + 加速查询 |
 
 ### v1.1.0 (2026-06-12)
 
@@ -362,6 +420,3 @@ mvn spring-boot:run
 7. **Token 过期**：JWT 默认 24 小时过期，过期后需重新登录。修改 `application.yml` 中 `jwt.expiration` 可调整
 8. **跨域**：CORS 配置为 `allowedOriginPattern("*")`，生产环境请替换为具体域名
 9. **代理转发**：前端开发模式下 Vite 自动代理 `/api` 和 `/uploads` 到 `localhost:8080`，部署时改为 Nginx 反向代理
-
-
-大小姐来也
