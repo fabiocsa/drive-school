@@ -39,6 +39,9 @@
   --shadow-card: 0 2px 12px rgba(0,0,0,0.06);
   --shadow-hover: 0 6px 24px rgba(0,0,0,0.1);
   --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+
+  --table-stripe: #fafafa;
+  --table-hover: #f5f7fa;
 }
 
 * {
@@ -149,5 +152,67 @@ h2 {
 }
 .fade-in-up {
   animation: fadeInUp 0.4s ease-out;
+}
+
+/* ===== 页面标题区域 ===== */
+.page-header {
+  margin-bottom: 20px;
+}
+.page-header .subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+/* ===== 统计卡片网格 ===== */
+.stat-cards-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+@media (max-width: 1400px) {
+  .stat-cards-row { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 1000px) {
+  .stat-cards-row { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 600px) {
+  .stat-cards-row { grid-template-columns: 1fr; }
+}
+
+/* ===== 筛选工具栏 ===== */
+.filter-toolbar {
+  background: var(--bg-card);
+  padding: 16px 20px;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ===== 档期标签容器 ===== */
+.schedule-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* ===== 空状态容器 ===== */
+.empty-state-wrapper {
+  padding: 48px 0;
+  display: flex;
+  justify-content: center;
+}
+
+/* ===== 表格容器增强 ===== */
+.table-container {
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  box-shadow: var(--shadow-card);
 }
 </style>

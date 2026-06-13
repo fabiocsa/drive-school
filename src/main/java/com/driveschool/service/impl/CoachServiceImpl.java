@@ -91,6 +91,8 @@ public class CoachServiceImpl extends ServiceImpl<CoachMapper, Coach> implements
             map.put("scheduleJson", coach.getScheduleJson());
             map.put("realName", user != null ? user.getRealName() : "");
             map.put("phone", user != null ? user.getPhone() : "");
+            // 修复：返回用户名，供前端编辑时回显
+            map.put("username", user != null ? user.getUsername() : "");
             result.add(map);
         }
         return result;
